@@ -52,6 +52,11 @@ def _ensure_db(path: Path) -> None:
             CREATE INDEX IF NOT EXISTS idx_stage_run ON stage_executions(run_id, stage);
             """
         )
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(runs)").fetchall()}
+        if "workspace" not in cols:
+            conn.execute("ALTER TABLE runs ADD COLUMN workspace TEXT")
+        if "extra_context" not in cols:
+            conn.execute("ALTER TABLE runs ADD COLUMN extra_context TEXT")
 
 
 @contextmanager
@@ -74,6 +79,8 @@ class RunStore:
         goal: str,
         profile: str,
         stage_overrides: dict[str, dict[str, str]] | None = None,
+        workspace: str | None = None,
+        extra_context: str | None = None,
     ) -> str:
         run_id = str(uuid.uuid4())
         now = _utc_now()
@@ -82,10 +89,19 @@ class RunStore:
             conn.execute(
                 """
                 INSERT INTO runs (id, goal, profile, status, current_stage, review_round,
-                                  stage_overrides, created_at, updated_at)
-                VALUES (?, ?, ?, 'pending', 'plan', 0, ?, ?, ?)
+                                  stage_overrides, workspace, extra_context, created_at, updated_at)
+                VALUES (?, ?, ?, 'pending', 'plan', 0, ?, ?, ?, ?, ?)
                 """,
-                (run_id, goal, profile, overrides, now, now),
+                (
+                    run_id,
+                    goal,
+                    profile,
+                    overrides,
+                    workspace,
+                    extra_context,
+                    now,
+                    now,
+                ),
             )
         return run_id
 

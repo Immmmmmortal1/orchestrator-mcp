@@ -33,19 +33,23 @@ def build_messages(
     stage_config: StageConfig,
     inputs: dict[str, Any],
 ) -> list[dict[str, str]]:
+    from ..context.workspace import format_workspace_context_for_prompt
+
     rules = _STAGE_RULES.get(stage)
     if not rules:
         raise ValueError(f"unsupported stage for LLM prompt: {stage}")
 
-    skill_note = ""
-    if stage_config.skills:
-        skill_note = f"Follow skills: {', '.join(stage_config.skills)}.\n"
-
-    system = (
+    system_parts = [
         "You are a stage worker in a software delivery pipeline. "
-        "Output MUST be a single valid JSON object. No markdown fences, no commentary.\n"
-        f"{skill_note}{rules}"
-    )
+        "Output MUST be a single valid JSON object. No markdown fences, no commentary.",
+        rules,
+    ]
+
+    workspace_block = format_workspace_context_for_prompt(inputs.get("workspace_context"))
+    if workspace_block:
+        system_parts.append(workspace_block)
+
+    system = "\n\n".join(system_parts)
 
     user_payload: dict[str, Any] = {"goal": goal, "stage": stage}
     if inputs.get("plan"):
@@ -54,6 +58,11 @@ def build_messages(
         user_payload["code_handoff"] = inputs["code"]
     if inputs.get("review"):
         user_payload["review"] = inputs["review"]
+
+    ctx = inputs.get("workspace_context")
+    if isinstance(ctx, dict):
+        user_payload["workspace"] = ctx.get("workspace")
+        user_payload["context_sources"] = ctx.get("sources") or []
 
     user = "Input context (JSON):\n" + json.dumps(user_payload, ensure_ascii=False, indent=2)
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]

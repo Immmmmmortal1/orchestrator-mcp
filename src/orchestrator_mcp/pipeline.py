@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .context.workspace import load_workspace_context, resolve_workspace
 from .credentials import normalize_provider
 from .profiles import Profile, STAGE_ORDER, StageConfig, load_profile
 from .providers import get_provider
@@ -23,17 +24,34 @@ class Orchestrator:
         goal: str,
         profile_name: str = "daily-dev",
         stage_overrides: dict[str, dict[str, str]] | None = None,
+        workspace: str | None = None,
+        extra_context: str | None = None,
     ) -> dict[str, Any]:
         profile = load_profile(profile_name)
+        resolved_workspace = None
+        ws = resolve_workspace(workspace)
+        if ws is not None:
+            resolved_workspace = str(ws)
         run_id = self.store.create_run(
             goal=goal,
             profile=profile.name,
             stage_overrides=stage_overrides,
+            workspace=resolved_workspace,
+            extra_context=(extra_context or "").strip() or None,
         )
+        context_meta: dict[str, Any] | None = None
+        if resolved_workspace:
+            context_meta = load_workspace_context(
+                resolved_workspace,
+                skill_names=[],
+                extra_context=(extra_context or "").strip() or None,
+            )
         return {
             "ok": True,
             "run_id": run_id,
             "profile": profile.name,
+            "workspace": resolved_workspace,
+            "context_sources": (context_meta or {}).get("sources") or [],
             "next_stage": "plan",
             "stages": list(STAGE_ORDER),
         }
@@ -50,8 +68,21 @@ class Orchestrator:
         cfg.provider = normalize_provider(cfg.provider)
         return cfg
 
-    def _inputs_for_stage(self, run_id: str, stage: str) -> dict[str, Any]:
-        inputs: dict[str, Any] = {"goal": self.store.get_run(run_id)["goal"]}
+    def _inputs_for_stage(
+        self,
+        run_id: str,
+        stage: str,
+        stage_cfg: StageConfig,
+    ) -> dict[str, Any]:
+        run = self.store.get_run(run_id)
+        inputs: dict[str, Any] = {"goal": run["goal"]}
+        workspace = run.get("workspace")
+        if workspace:
+            inputs["workspace_context"] = load_workspace_context(
+                workspace,
+                skill_names=stage_cfg.skills,
+                extra_context=run.get("extra_context"),
+            )
         if stage in ("code", "review", "deliver"):
             plan = self.store.latest_handoff(run_id, "plan")
             if plan is None:
@@ -85,7 +116,7 @@ class Orchestrator:
 
         stage_cfg = self.resolve_stage_config(run, target)
         provider = get_provider(stage_cfg.provider)
-        inputs = self._inputs_for_stage(run_id, target)
+        inputs = self._inputs_for_stage(run_id, target, stage_cfg)
 
         self.store.update_run(run_id, status="running", current_stage=target)
         try:
@@ -103,7 +134,11 @@ class Orchestrator:
                 provider=stage_cfg.provider,
                 model=stage_cfg.model,
                 status="completed",
-                input_payload={"stage": target, "inputs_keys": list(inputs.keys())},
+                input_payload={
+                    "stage": target,
+                    "inputs_keys": list(inputs.keys()),
+                    "context_sources": (inputs.get("workspace_context") or {}).get("sources"),
+                },
                 output_payload=result.handoff,
                 prompt_tokens=result.prompt_tokens,
                 completion_tokens=result.completion_tokens,
@@ -163,11 +198,15 @@ class Orchestrator:
         goal: str,
         profile_name: str = "daily-dev",
         stage_overrides: dict[str, dict[str, str]] | None = None,
+        workspace: str | None = None,
+        extra_context: str | None = None,
     ) -> dict[str, Any]:
         started = self.start_run(
             goal=goal,
             profile_name=profile_name,
             stage_overrides=stage_overrides,
+            workspace=workspace,
+            extra_context=extra_context,
         )
         run_id = started["run_id"]
         stages_run: list[str] = []
@@ -219,6 +258,7 @@ class Orchestrator:
                 "id": run["id"],
                 "goal": run["goal"],
                 "profile": run["profile"],
+                "workspace": run.get("workspace"),
                 "status": run["status"],
                 "current_stage": run["current_stage"],
                 "review_round": run["review_round"],

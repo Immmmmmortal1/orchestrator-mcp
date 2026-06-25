@@ -6,6 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from .context.workspace import format_workspace_context_for_prompt, load_workspace_context
 from .pipeline import Orchestrator
 from .providers import get_provider, list_provider_status, normalize_provider
 from .providers.openai_compat import _extract_json
@@ -28,6 +29,61 @@ def _test_aliases() -> None:
     assert normalize_provider("glm") == "zhipu"
     assert normalize_provider("codex") == "codex-lb"
 
+
+def _test_workspace_context() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "AGENTS.md").write_text("# Agents\nUse snake_case for Python.\n", encoding="utf-8")
+        learnings = root / ".learnings"
+        learnings.mkdir()
+        (learnings / "LEARNINGS.md").write_text("- always run verify.sh\n", encoding="utf-8")
+        rules = root / ".cursor" / "rules"
+        rules.mkdir(parents=True)
+        (rules / "style.mdc").write_text("Prefer minimal diffs.\n", encoding="utf-8")
+
+        ctx = load_workspace_context(root)
+        if "AGENTS.md" not in ctx["sources"]:
+            raise AssertionError("expected AGENTS.md in sources")
+        if not any("snake_case" in s["content"] for s in ctx["sections"]):
+            raise AssertionError("AGENTS content missing")
+
+        prompt = format_workspace_context_for_prompt(ctx)
+        if "snake_case" not in prompt or "minimal diffs" not in prompt:
+            raise AssertionError("prompt missing workspace file contents")
+
+        from .profiles import load_profile
+        from .providers.prompts import build_messages
+
+        messages = build_messages(
+            stage="plan",
+            goal="Add workspace reader",
+            stage_config=load_profile("daily-dev-stub").stage("plan"),
+            inputs={"workspace_context": ctx},
+        )
+        system = messages[0]["content"]
+        if "snake_case" not in system:
+            raise AssertionError("build_messages did not inject workspace into system prompt")
+
+        os.environ["ORCHESTRATOR_MCP_DATA"] = str(root / "data")
+        (root / "data").mkdir()
+        engine = Orchestrator()
+        started = engine.start_run(
+            goal="Workspace pipeline test",
+            profile_name="daily-dev-stub",
+            workspace=str(root),
+            extra_context="Mid-run note from client",
+        )
+        if not started.get("workspace"):
+            raise AssertionError("start_run should record workspace")
+        if "AGENTS.md" not in (started.get("context_sources") or []):
+            raise AssertionError("start_run should list context sources")
+
+        run_id = started["run_id"]
+        result = engine.dispatch_stage(run_id, "plan")
+        if not result.get("ok"):
+            raise AssertionError(result.get("error") or "plan dispatch failed")
+
+        del os.environ["ORCHESTRATOR_MCP_DATA"]
 
 def _test_stub_pipeline() -> str:
     engine = Orchestrator()
@@ -149,6 +205,7 @@ def run_self_test() -> int:
         _test_json_extract()
         _test_provider_registry()
         _test_aliases()
+        _test_workspace_context()
         run_id = _test_stub_pipeline()
         _test_config_store_roundtrip()
         _test_live_plan_optional()
