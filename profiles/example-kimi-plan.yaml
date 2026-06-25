@@ -1,0 +1,26 @@
+name: example-kimi-plan
+description: Example — moonshot plan, glm code, gpt review (swap models freely in YAML)
+
+stages:
+  plan:
+    provider: moonshot
+    model: kimi-k2.5
+    skills:
+      - writing-plans
+    output_schema: plan.v1
+  code:
+    provider: glm
+    model: glm-4-flash
+    output_schema: code_handoff.v1
+  review:
+    provider: gpt
+    model: gpt-4o-mini
+    output_schema: review.v1
+  deliver:
+    provider: deepseek
+    model: deepseek-chat
+    output_schema: deliver.v1
+
+routing:
+  max_review_rounds: 2
+  skip_review: false

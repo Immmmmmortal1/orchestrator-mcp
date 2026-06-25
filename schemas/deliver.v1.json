@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "deliver.v1",
+  "type": "object",
+  "required": ["schema", "title", "summary", "test_plan", "artifacts"],
+  "properties": {
+    "schema": { "const": "deliver.v1" },
+    "title": { "type": "string" },
+    "summary": { "type": "string" },
+    "test_plan": { "type": "array", "items": { "type": "string" } },
+    "artifacts": { "type": "array", "items": { "type": "string" } },
+    "pr_body_markdown": { "type": "string" }
+  },
+  "additionalProperties": true
+}

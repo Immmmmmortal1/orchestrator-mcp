@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "code_handoff.v1",
+  "type": "object",
+  "required": ["schema", "tasks_done", "files_changed", "test_commands", "notes_for_reviewer"],
+  "properties": {
+    "schema": { "const": "code_handoff.v1" },
+    "tasks_done": { "type": "array", "items": { "type": "string" } },
+    "files_changed": { "type": "array", "items": { "type": "string" } },
+    "test_commands": { "type": "array", "items": { "type": "string" } },
+    "notes_for_reviewer": { "type": "string" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,29 @@
+name: daily-dev
+description: Plan→Code→Review→Deliver — deepseek / glm / gpt / moonshot (model per stage)
+
+stages:
+  plan:
+    provider: deepseek
+    model: deepseek-chat
+    skills:
+      - writing-plans
+    output_schema: plan.v1
+  code:
+    provider: glm
+    model: glm-4-flash
+    skills: []
+    output_schema: code_handoff.v1
+  review:
+    provider: gpt
+    model: gpt-4o-mini
+    skills: []
+    output_schema: review.v1
+  deliver:
+    provider: moonshot
+    model: moonshot-v1-8k
+    skills: []
+    output_schema: deliver.v1
+
+routing:
+  max_review_rounds: 2
+  skip_review: false

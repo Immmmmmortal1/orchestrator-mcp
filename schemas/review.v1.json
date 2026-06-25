@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "review.v1",
+  "type": "object",
+  "required": ["schema", "verdict", "blocking", "suggestions"],
+  "properties": {
+    "schema": { "const": "review.v1" },
+    "verdict": { "enum": ["pass", "revise"] },
+    "blocking": { "type": "array", "items": { "type": "string" } },
+    "suggestions": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}
