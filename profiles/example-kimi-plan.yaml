@@ -1,26 +1,19 @@
 name: example-kimi-plan
-description: Example — moonshot plan, glm code, gpt review (swap models freely in YAML)
+description: Example role-based review profile with different models per reviewer
 
 stages:
-  plan:
+  ui_review:
     provider: moonshot
-    model: kimi-k2.5
-    skills:
-      - writing-plans
-    output_schema: plan.v1
-  code:
-    provider: glm
-    model: glm-4-flash
-    output_schema: code_handoff.v1
-  review:
-    provider: gpt
-    model: gpt-4o-mini
+    model: kimi-k2.6
+    skills: []
     output_schema: review.v1
-  deliver:
+  code_review:
+    provider: codex-lb
+    model: gpt-5.4
+    skills: []
+    output_schema: review.v1
+  general_review:
     provider: deepseek
-    model: deepseek-chat
-    output_schema: deliver.v1
-
-routing:
-  max_review_rounds: 2
-  skip_review: false
+    model: deepseek-v4-flash
+    skills: []
+    output_schema: review.v1

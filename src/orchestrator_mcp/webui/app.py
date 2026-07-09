@@ -41,19 +41,24 @@ MCP_TOOLS: list[dict[str, str]] = [
         "desc_zh": "读取 profiles/*.yaml；返回 active_profile（WebUI 默认）与各方案 is_active。",
     },
     {
+        "name": "orchestrate_effective_config",
+        "label_zh": "查看有效配置",
+        "desc_zh": "不调用模型，展示 UI / 代码 / 通用审查角色实际使用的 profile / provider / model / key 状态。",
+    },
+    {
         "name": "orchestrate_run_start",
         "label_zh": "创建编排任务",
-        "desc_zh": "按 Profile 创建 run，返回 run_id，下一步从 plan 开始。",
+        "desc_zh": "按 Profile 创建审查 run；可指定 ui_review / code_review / general_review。",
     },
     {
         "name": "orchestrate_dispatch",
         "label_zh": "执行单个 Stage",
-        "desc_zh": "对 run_id 跑 plan / code / review / deliver 中的一步。",
+        "desc_zh": "对 run_id 跑 ui_review / code_review / general_review 中的一步。",
     },
     {
         "name": "orchestrate_run_pipeline",
         "label_zh": "一键跑完整流水线",
-        "desc_zh": "plan → code → review → deliver 顺序执行直到完成或失败。",
+        "desc_zh": "默认依次跑三类审查；传 stage 时只跑单个审查角色。",
     },
     {
         "name": "orchestrate_status",
@@ -68,7 +73,7 @@ MCP_TOOLS: list[dict[str, str]] = [
     {
         "name": "orchestrate_stage_override",
         "label_zh": "运行时改 Stage",
-        "desc_zh": "在 dispatch 前临时换某 stage 的 provider / model。",
+        "desc_zh": "在 dispatch 前临时换某审查角色的 provider / model。",
     },
 ]
 

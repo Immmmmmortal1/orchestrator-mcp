@@ -78,6 +78,7 @@ class RunStore:
         *,
         goal: str,
         profile: str,
+        current_stage: str = "ui_review",
         stage_overrides: dict[str, dict[str, str]] | None = None,
         workspace: str | None = None,
         extra_context: str | None = None,
@@ -90,12 +91,13 @@ class RunStore:
                 """
                 INSERT INTO runs (id, goal, profile, status, current_stage, review_round,
                                   stage_overrides, workspace, extra_context, created_at, updated_at)
-                VALUES (?, ?, ?, 'pending', 'plan', 0, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, 'pending', ?, 0, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
                     goal,
                     profile,
+                    current_stage,
                     overrides,
                     workspace,
                     extra_context,

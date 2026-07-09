@@ -19,6 +19,25 @@ _STAGE_RULES: dict[str, str] = {
         "Produce review.v1 JSON only. Fields: schema=review.v1, verdict=pass|revise, "
         "blocking[], suggestions[]. Judge whether code handoff satisfies the plan acceptance criteria."
     ),
+    "ui_review": (
+        "Produce review.v1 JSON only. Fields: schema=review.v1, verdict=pass|revise, "
+        "blocking[], suggestions[]. You are a UI implementation reviewer. Focus on Figma/design parity, "
+        "runtime view hierarchy evidence, missing/extra elements, typography, color, spacing, size, alignment, "
+        "interaction states, accessibility identifiers, and screenshot/DebugBridge discrepancies. "
+        "Do not block on unrelated code-style issues unless they directly affect UI correctness."
+    ),
+    "code_review": (
+        "Produce review.v1 JSON only. Fields: schema=review.v1, verdict=pass|revise, "
+        "blocking[], suggestions[]. You are a code reviewer. Focus on correctness, regressions, state flow, "
+        "error handling, architecture fit, performance, security/privacy, maintainability, and missing tests. "
+        "Do not block on visual pixel differences unless the implementation code clearly causes them."
+    ),
+    "general_review": (
+        "Produce review.v1 JSON only. Fields: schema=review.v1, verdict=pass|revise, "
+        "blocking[], suggestions[]. You are a general product/implementation reviewer. Focus on requirements, "
+        "user flow completeness, edge cases, consistency, release risk, and anything not covered by dedicated "
+        "UI or code review roles."
+    ),
     "deliver": (
         "Produce deliver.v1 JSON only. Fields: schema=deliver.v1, title, summary, test_plan[], "
         "artifacts[], pr_body_markdown. Summarize for human handoff / PR description."

@@ -1,9 +1,9 @@
 # orchestrator-mcp
 
-多模型 **Agent 编排 MCP**：`plan → code → review → deliver`。
+多模型 **审查 MCP**：按角色拆分 UI 审查、代码审查、通用审查。
 
 - **Handoff schema 固定**（`schemas/`）
-- **Provider 按厂商**（deepseek / moonshot / zhipu / openai），**model 按 stage 配置**
+- **Provider 按厂商**（deepseek / moonshot / zhipu / openai / codex-lb），**model 按 stage 配置**
 - **别名**：`glm` → zhipu，`gpt` → openai
 - **凭证**：环境变量 → WebUI 本地 JSON → `~/Desktop/服务器.md`
 - **Web 配置界面**：编辑 Provider Key / Base URL / 默认模型，以及各 Profile 的 Stage 模型
@@ -16,7 +16,7 @@ cd orchestrator-mcp
 ./start.sh               # MCP :18067
 ./start-webui.sh         # 配置 WebUI :18068 → http://127.0.0.1:18068
 
-# 可选：只测 plan 阶段真实 DeepSeek 调用
+# 可选：只测 review 阶段真实模型调用
 ORCHESTRATOR_LIVE_TEST=1 ./verify.sh
 ```
 
@@ -25,7 +25,7 @@ ORCHESTRATOR_LIVE_TEST=1 ./verify.sh
 | 功能 | 说明 |
 |------|------|
 | Providers | 编辑 `api_key`、`base_url`、`default_model`；写入 `data/providers.local.json` |
-| Stages | 按 Profile 覆盖 plan/code/review/deliver 的 provider + model；写入 `data/stages.local.json` |
+| Stages | 按 Profile 覆盖 `ui_review` / `code_review` / `general_review` 的 provider + model；写入 `data/stages.local.json` |
 
 本地配置文件**不进 git**。环境变量仍优先于 WebUI 写入的值。
 
@@ -33,20 +33,23 @@ ORCHESTRATOR_LIVE_TEST=1 ./verify.sh
 
 | Profile | 用途 |
 |---------|------|
-| `daily-dev-stub` | 离线自测，不调 API |
-| `daily-dev` | deepseek plan / glm code / gpt review / moonshot deliver |
-| `example-kimi-plan` | 示例：plan 换 kimi |
+| `daily-dev-stub` | 离线三角色审查自测，不调 API |
+| `daily-dev` | 日常三角色审查 |
+| `example-kimi-plan` | 多模型审查示例，不同角色用不同模型 |
 
-同一 OpenAI 账号下 plan 用 `gpt-4o-mini`、code 用 `gpt-5`：只改 YAML 里各 stage 的 `model`，**不用**建两个 provider。
+同一厂商下切换模型：只改 YAML 或 WebUI Stages 里的 `model`，**不用**建两个 provider。
 
 ```yaml
 stages:
-  plan:
-    provider: gpt
-    model: gpt-4o-mini
-  code:
-    provider: gpt
-    model: gpt-5
+  ui_review:
+    provider: codex-lb
+    model: gpt-5.4
+  code_review:
+    provider: codex-lb
+    model: gpt-5.4
+  general_review:
+    provider: deepseek
+    model: deepseek-v4-flash
 ```
 
 ## 凭证环境变量
@@ -84,7 +87,7 @@ wire_api = "responses"
 | Wire API | `responses` |
 | Reasoning Effort | `medium` |
 
-Stage 里把 review/deliver 的 provider 选 **codex-lb**（或别名 **codex**），model 填 `gpt-5.4`。
+Stage 里可把 `ui_review` / `code_review` 的 provider 选 **codex-lb**（或别名 **codex**），model 填 `gpt-5.4`。
 
 **注意**：`/chat/completions` 在该中转上返回 405；必须用 Responses 协议。
 
@@ -113,9 +116,19 @@ MCP **不单独维护**记忆文件。传入 `workspace`（或设置 `ORCHESTRAT
 |------|------|
 | `orchestrate_list_providers` | 各 provider 是否已配置 key |
 | `orchestrate_provider_check` | 检查单个 provider |
+| `orchestrate_effective_config` | 不调用模型，查看 MCP 当前实际会用的 profile / stage / provider / model |
 | `orchestrate_workspace_context` | 预览 workspace 项目上下文 |
 | `orchestrate_run_start` / `orchestrate_dispatch` / `orchestrate_run_pipeline` | 编排执行（支持 `workspace`） |
 | `orchestrate_stage_override` | 运行时换 provider/model |
+
+### Provider 选择规则
+
+- Providers 页只表示“这个厂商已配置 key / base_url / 默认模型”。
+- 真正决定 MCP 执行使用哪个 provider 的是 Stages 页；保存后写入 `data/stages.local.json`。
+- 调用前可先跑 `orchestrate_effective_config(stage="ui_review")`，确认有效配置，避免误跑到 YAML 默认值。
+- `orchestrate_run_pipeline(stage="ui_review")` 只跑 UI 审查；不传 `stage` 时依次跑三类审查。
+- `stage_overrides_json` 支持短写：`{"provider":"codex-lb","model":"gpt-5.4"}` 或 `{"code_review":{"model":"codex/gpt-5.4"}}`。
+- 兼容旧入参：`review` 会映射到 `general_review`。
 
 ## Cursor 配置
 

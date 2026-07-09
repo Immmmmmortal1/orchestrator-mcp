@@ -70,12 +70,12 @@ class StubProvider:
                 "test_commands": ["cd orchestrator-mcp && ./verify.sh"],
                 "notes_for_reviewer": "Stub code stage — no files were modified.",
             }
-        elif stage == "review":
+        elif stage in ("review", "ui_review", "code_review", "general_review"):
             handoff = {
                 "schema": "review.v1",
                 "verdict": "pass",
                 "blocking": [],
-                "suggestions": ["Replace stub providers with real model adapters."],
+                "suggestions": [f"Replace stub provider with a real model for {stage}."],
             }
         elif stage == "deliver":
             plan = inputs.get("plan") or {}

@@ -1,29 +1,19 @@
 name: daily-dev-stub
-description: Stub-only pipeline for offline self-test (no LLM API calls)
+description: Stub-only role-based review flow for offline self-test (no LLM API calls)
 
 stages:
-  plan:
+  ui_review:
     provider: stub
-    model: stub-planner
-    skills:
-      - writing-plans
-    output_schema: plan.v1
-  code:
-    provider: stub
-    model: stub-coder
-    skills: []
-    output_schema: code_handoff.v1
-  review:
-    provider: stub
-    model: stub-reviewer
+    model: stub-ui-reviewer
     skills: []
     output_schema: review.v1
-  deliver:
+  code_review:
     provider: stub
-    model: stub-deliver
+    model: stub-code-reviewer
     skills: []
-    output_schema: deliver.v1
-
-routing:
-  max_review_rounds: 2
-  skip_review: false
+    output_schema: review.v1
+  general_review:
+    provider: stub
+    model: stub-general-reviewer
+    skills: []
+    output_schema: review.v1

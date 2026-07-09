@@ -12,7 +12,20 @@ from .config_store import get_active_profile_name, get_stage_overrides
 from .labels import profile_label_zh
 
 
-STAGE_ORDER = ("plan", "code", "review", "deliver")
+STAGE_ORDER = ("ui_review", "code_review", "general_review")
+STAGE_ALIASES = {
+    "review": "general_review",
+    "ui": "ui_review",
+    "code": "code_review",
+    "general": "general_review",
+    "other": "general_review",
+    "other_review": "general_review",
+}
+
+
+def normalize_stage(name: str | None) -> str:
+    key = (name or "").strip().lower().replace("-", "_")
+    return STAGE_ALIASES.get(key, key)
 
 
 @dataclass
@@ -32,6 +45,7 @@ class Profile:
     skip_review: bool = False
 
     def stage(self, name: str) -> StageConfig:
+        name = normalize_stage(name)
         if name not in self.stages:
             raise KeyError(f"unknown stage {name!r} in profile {self.name!r}")
         return self.stages[name]
@@ -47,12 +61,25 @@ def load_profile(name: str) -> Profile:
     for stage_name, cfg in stages_raw.items():
         if not isinstance(cfg, dict):
             raise ValueError(f"invalid stage config for {stage_name}")
-        stages[stage_name] = StageConfig(
+        stage_key = normalize_stage(str(stage_name))
+        stages[stage_key] = StageConfig(
             provider=normalize_provider(str(cfg.get("provider", "stub"))),
             model=str(cfg.get("model", "stub")),
             output_schema=str(cfg.get("output_schema", "")),
             skills=list(cfg.get("skills") or []),
         )
+    fallback_stage = stages.get("general_review") or next(iter(stages.values()), None)
+    if fallback_stage:
+        for stage_name in STAGE_ORDER:
+            stages.setdefault(
+                stage_name,
+                StageConfig(
+                    provider=fallback_stage.provider,
+                    model=fallback_stage.model,
+                    output_schema=fallback_stage.output_schema,
+                    skills=list(fallback_stage.skills),
+                ),
+            )
     routing = raw.get("routing") or {}
     profile = Profile(
         name=str(raw.get("name") or name),

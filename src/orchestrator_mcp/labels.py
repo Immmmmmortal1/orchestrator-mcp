@@ -13,17 +13,17 @@ PROVIDER_LABELS_ZH: dict[str, dict[str, str]] = {
     "deepseek": {
         "label_zh": "DeepSeek",
         "vendor_zh": "深度求索",
-        "description_zh": "OpenAI 兼容 API；适合 plan / 长文本推理。",
+        "description_zh": "OpenAI 兼容 API；适合长文本审查或低成本 reviewer。",
     },
     "moonshot": {
         "label_zh": "Moonshot",
         "vendor_zh": "月之暗面 · Kimi",
-        "description_zh": "Kimi 系列；适合 deliver 汇总或 plan。",
+        "description_zh": "Kimi 系列；适合长上下文审查与总结。",
     },
     "zhipu": {
         "label_zh": "智谱 GLM",
         "vendor_zh": "智谱 AI",
-        "description_zh": "别名 glm；适合 code 阶段快速生成。",
+        "description_zh": "别名 glm；可作为快速审查模型。",
     },
     "openai": {
         "label_zh": "OpenAI",
@@ -53,7 +53,19 @@ STAGE_LABELS_ZH: dict[str, dict[str, str]] = {
     },
     "review": {
         "label_zh": "审查 Review",
-        "description_zh": "对照 plan 做 pass/fail；不通过可打回 code。",
+        "description_zh": "基于调用者提供的证据做 pass/revise 审查。",
+    },
+    "ui_review": {
+        "label_zh": "UI 审查",
+        "description_zh": "审查 Figma/截图/DebugBridge 证据，关注视觉还原、元素遗漏、交互与可访问性。",
+    },
+    "code_review": {
+        "label_zh": "代码审查",
+        "description_zh": "审查实现正确性、回归风险、架构、性能、安全与测试覆盖。",
+    },
+    "general_review": {
+        "label_zh": "通用审查",
+        "description_zh": "审查需求完整性、产品流程、边界场景与非 UI/代码专项问题。",
     },
     "deliver": {
         "label_zh": "交付 Deliver",
@@ -71,15 +83,15 @@ SCHEMA_LABELS_ZH: dict[str, str] = {
 PROFILE_LABELS_ZH: dict[str, dict[str, str]] = {
     "daily-dev-stub": {
         "label_zh": "离线自测",
-        "description_zh": "四段均用 stub，不消耗 API；跑 verify / 联调 pipeline 用。",
+        "description_zh": "三类审查角色均用 stub，不消耗 API；跑 verify / 联调 MCP 用。",
     },
     "daily-dev": {
         "label_zh": "日常开发",
-        "description_zh": "deepseek 规划 → glm 编码 → gpt 审查 → moonshot 交付；成本与能力均衡。",
+        "description_zh": "UI / 代码 / 通用三类审查角色；provider/model 可在 WebUI Stages 中覆盖。",
     },
     "example-kimi-plan": {
-        "label_zh": "Kimi 规划示例",
-        "description_zh": "plan 用 Kimi，其余可自由换；演示「按 stage 换 model」的写法。",
+        "label_zh": "多模型审查示例",
+        "description_zh": "演示按 UI / 代码 / 通用审查角色分别选择模型。",
     },
 }
 

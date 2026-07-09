@@ -567,7 +567,7 @@ function renderGuide(info) {
     <div class="guide-card">
       <h2>MCP 工具（在 Cursor Agent 里调用）</h2>
       <ul class="tool-list">${tools}</ul>
-      <p class="cell-desc">典型用法：先 <code>orchestrate_run_start</code>，再 <code>orchestrate_dispatch</code>；或直接 <code>orchestrate_run_pipeline</code> 一键跑完。</p>
+      <p class="cell-desc">典型用法：先 <code>orchestrate_effective_config(stage="ui_review")</code> 确认角色配置，再用 <code>orchestrate_run_pipeline(stage="ui_review")</code> 跑指定审查；不传 stage 时会依次跑三类审查。</p>
     </div>
 
     <div class="guide-card">

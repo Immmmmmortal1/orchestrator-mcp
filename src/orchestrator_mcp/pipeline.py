@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from .config_store import normalize_stage_overrides
 from .context.workspace import load_workspace_context, resolve_workspace
 from .credentials import normalize_provider
-from .profiles import Profile, STAGE_ORDER, StageConfig, load_profile
+from .profiles import Profile, STAGE_ORDER, StageConfig, load_profile, normalize_stage
 from .providers import get_provider
 from .schemas import validate_handoff
 from .store import RunStore
@@ -24,18 +25,24 @@ class Orchestrator:
         goal: str,
         profile_name: str = "daily-dev",
         stage_overrides: dict[str, dict[str, str]] | None = None,
+        stage: str | None = None,
         workspace: str | None = None,
         extra_context: str | None = None,
     ) -> dict[str, Any]:
         profile = load_profile(profile_name)
+        start_stage = normalize_stage(stage) if stage else STAGE_ORDER[0]
+        if start_stage not in STAGE_ORDER:
+            raise PipelineError(f"invalid stage: {stage}")
         resolved_workspace = None
         ws = resolve_workspace(workspace)
         if ws is not None:
             resolved_workspace = str(ws)
+        normalized_overrides = normalize_stage_overrides(stage_overrides, default_stage=start_stage)
         run_id = self.store.create_run(
             goal=goal,
             profile=profile.name,
-            stage_overrides=stage_overrides,
+            current_stage=start_stage,
+            stage_overrides=normalized_overrides,
             workspace=resolved_workspace,
             extra_context=(extra_context or "").strip() or None,
         )
@@ -52,14 +59,15 @@ class Orchestrator:
             "profile": profile.name,
             "workspace": resolved_workspace,
             "context_sources": (context_meta or {}).get("sources") or [],
-            "next_stage": "plan",
+            "next_stage": start_stage,
             "stages": list(STAGE_ORDER),
         }
 
     def resolve_stage_config(self, run: dict[str, Any], stage: str) -> StageConfig:
         profile = load_profile(run["profile"])
+        stage = normalize_stage(stage)
         cfg = profile.stage(stage)
-        overrides = run.get("stage_overrides") or {}
+        overrides = normalize_stage_overrides(run.get("stage_overrides") or {})
         stage_override = overrides.get(stage) or {}
         if stage_override.get("provider"):
             cfg.provider = normalize_provider(stage_override["provider"])
@@ -83,36 +91,17 @@ class Orchestrator:
                 skill_names=stage_cfg.skills,
                 extra_context=run.get("extra_context"),
             )
-        if stage in ("code", "review", "deliver"):
-            plan = self.store.latest_handoff(run_id, "plan")
-            if plan is None:
-                raise PipelineError("plan handoff missing — run plan stage first")
-            inputs["plan"] = plan
-        if stage in ("review", "deliver"):
-            code = self.store.latest_handoff(run_id, "code")
-            if code is None:
-                raise PipelineError("code handoff missing — run code stage first")
-            inputs["code"] = code
-        if stage == "deliver":
-            review = self.store.latest_handoff(run_id, "review")
-            if review is None and not load_profile(self.store.get_run(run_id)["profile"]).skip_review:
-                raise PipelineError("review handoff missing — run review stage first")
-            inputs["review"] = review or {"verdict": "skipped"}
         return inputs
 
     def dispatch_stage(self, run_id: str, stage: str | None = None) -> dict[str, Any]:
         run = self.store.get_run(run_id)
         profile = load_profile(run["profile"])
-        target = stage or run.get("current_stage") or "plan"
+        target = normalize_stage(stage or run.get("current_stage") or STAGE_ORDER[0])
         if target not in STAGE_ORDER:
             raise PipelineError(f"invalid stage: {target}")
 
         if run["status"] == "completed":
             return {"ok": True, "run_id": run_id, "status": "completed", "message": "run already completed"}
-
-        if target == "review" and profile.skip_review:
-            self.store.update_run(run_id, current_stage="deliver", status="running")
-            return self.dispatch_stage(run_id, "deliver")
 
         stage_cfg = self.resolve_stage_config(run, target)
         provider = get_provider(stage_cfg.provider)
@@ -179,14 +168,6 @@ class Orchestrator:
         handoff: dict[str, Any],
         profile: Profile,
     ) -> tuple[str | None, str]:
-        if stage == "review" and handoff.get("verdict") == "revise":
-            run = self.store.get_run(run_id)
-            rounds = int(run.get("review_round") or 0) + 1
-            self.store.update_run(run_id, review_round=rounds)
-            if rounds < profile.max_review_rounds:
-                return "code", "running"
-            return None, "failed"
-
         idx = STAGE_ORDER.index(stage)
         if idx + 1 < len(STAGE_ORDER):
             return STAGE_ORDER[idx + 1], "running"
@@ -198,13 +179,18 @@ class Orchestrator:
         goal: str,
         profile_name: str = "daily-dev",
         stage_overrides: dict[str, dict[str, str]] | None = None,
+        stage: str | None = None,
         workspace: str | None = None,
         extra_context: str | None = None,
     ) -> dict[str, Any]:
+        target_stage = normalize_stage(stage) if stage else None
+        if target_stage and target_stage not in STAGE_ORDER:
+            raise PipelineError(f"invalid stage: {stage}")
         started = self.start_run(
             goal=goal,
             profile_name=profile_name,
             stage_overrides=stage_overrides,
+            stage=target_stage,
             workspace=workspace,
             extra_context=extra_context,
         )
@@ -220,6 +206,9 @@ class Orchestrator:
                 break
             self.dispatch_stage(run_id, stage)
             stages_run.append(stage)
+            if target_stage:
+                self.store.update_run(run_id, current_stage=None, status="completed")
+                break
 
         final = self.status(run_id)
         final["stages_executed"] = stages_run
@@ -233,6 +222,7 @@ class Orchestrator:
         provider: str | None = None,
         model: str | None = None,
     ) -> dict[str, Any]:
+        stage = normalize_stage(stage)
         if stage not in STAGE_ORDER:
             raise PipelineError(f"invalid stage: {stage}")
         run = self.store.get_run(run_id)
@@ -242,9 +232,10 @@ class Orchestrator:
             entry["provider"] = provider
         if model:
             entry["model"] = model
-        overrides[stage] = entry
+        normalized = normalize_stage_overrides({stage: entry}, default_stage=stage)
+        overrides[stage] = normalized.get(stage, entry)
         self.store.update_run(run_id, stage_overrides=overrides)
-        return {"ok": True, "run_id": run_id, "stage": stage, "override": entry}
+        return {"ok": True, "run_id": run_id, "stage": stage, "override": overrides[stage]}
 
     def status(self, run_id: str) -> dict[str, Any]:
         run = self.store.get_run(run_id)
@@ -270,6 +261,7 @@ class Orchestrator:
         }
 
     def handoff(self, run_id: str, stage: str) -> dict[str, Any]:
+        stage = normalize_stage(stage)
         payload = self.store.latest_handoff(run_id, stage)
         if payload is None:
             raise PipelineError(f"no completed handoff for stage {stage!r}")

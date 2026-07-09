@@ -8,7 +8,15 @@ from .config import data_dir
 from .labels import profile_label_zh, provider_label_zh, schema_label_zh, source_label_zh, stage_label_zh
 
 PROVIDER_IDS = ("deepseek", "moonshot", "zhipu", "openai", "codex-lb")
-STAGE_IDS = ("plan", "code", "review", "deliver")
+STAGE_IDS = ("ui_review", "code_review", "general_review")
+_STAGE_ALIASES = {
+    "review": "general_review",
+    "ui": "ui_review",
+    "code": "code_review",
+    "general": "general_review",
+    "other": "general_review",
+    "other_review": "general_review",
+}
 
 _DEFAULT_PROVIDER_META: dict[str, dict[str, str]] = {
     "deepseek": {
@@ -71,7 +79,16 @@ _MODEL_SUGGESTIONS: dict[str, list[str]] = {
     ],
     "openai": ["gpt-4o-mini", "gpt-4o", "gpt-5", "gpt-5.4", "o3-mini", "o4-mini"],
     "codex-lb": ["gpt-5.4", "gpt-5", "gpt-4o"],
-    "stub": ["stub", "stub-planner", "stub-coder", "stub-reviewer", "stub-deliver"],
+    "stub": [
+        "stub",
+        "stub-planner",
+        "stub-coder",
+        "stub-reviewer",
+        "stub-ui-reviewer",
+        "stub-code-reviewer",
+        "stub-general-reviewer",
+        "stub-deliver",
+    ],
 }
 
 _MODEL_PREFIXES: dict[str, str] = {
@@ -488,15 +505,79 @@ def get_stage_overrides(profile_name: str) -> dict[str, dict[str, str]]:
     raw = profiles.get(profile_name) or {}
     if not isinstance(raw, dict):
         return {}
+    return normalize_stage_overrides(raw)
+
+
+def _split_provider_model(value: str) -> tuple[str, str] | None:
+    """Accept common shorthand like codex/gpt-5.4 or deepseek/deepseek-chat."""
+    from .credentials import normalize_provider
+
+    text = normalize_model_id(value)
+    if "/" not in text:
+        return None
+    provider_part, model_part = text.split("/", 1)
+    provider = normalize_provider(provider_part)
+    if provider not in (*PROVIDER_IDS, "stub") or not model_part.strip():
+        return None
+    return provider, model_part.strip()
+
+
+def normalize_stage_id(name: str | None) -> str:
+    key = (name or "").strip().lower().replace("-", "_")
+    return _STAGE_ALIASES.get(key, key)
+
+
+def normalize_stage_overrides(
+    raw: dict[str, Any] | None,
+    *,
+    default_stage: str = "general_review",
+) -> dict[str, dict[str, str]]:
+    """Normalize WebUI/MCP stage overrides into {stage: {provider, model}}.
+
+    This keeps MCP callers from guessing the exact shape. Supported forms:
+    - {"ui_review": {"provider": "codex-lb", "model": "gpt-5.4"}}
+    - {"provider": "codex-lb", "model": "gpt-5.4"} for general review runs
+    - {"code_review": {"model": "codex/gpt-5.4"}}
+    """
+    from .credentials import normalize_provider
+
+    if not isinstance(raw, dict):
+        return {}
+
+    stage_source: dict[str, Any]
+    if any(k in raw for k in ("provider", "model")):
+        stage_source = {normalize_stage_id(default_stage): raw}
+    else:
+        stage_source = {
+            normalize_stage_id(str(stage)): cfg
+            for stage, cfg in raw.items()
+        }
+
     out: dict[str, dict[str, str]] = {}
     for stage in STAGE_IDS:
-        cfg = raw.get(stage)
-        if isinstance(cfg, dict):
-            out[stage] = {
-                k: str(v)
-                for k, v in cfg.items()
-                if k in ("provider", "model") and str(v).strip()
-            }
+        cfg = stage_source.get(stage)
+        if not isinstance(cfg, dict):
+            continue
+
+        provider = normalize_provider(str(cfg.get("provider") or "").strip())
+        model = normalize_model_id(str(cfg.get("model") or ""))
+        split = _split_provider_model(model)
+        if split:
+            split_provider, split_model = split
+            if not provider:
+                provider = split_provider
+            if provider == split_provider:
+                model = split_model
+
+        item: dict[str, str] = {}
+        if provider:
+            item["provider"] = provider
+        if model:
+            if provider:
+                model = resolve_model_for_provider(provider, model)
+            item["model"] = model
+        if item:
+            out[stage] = item
     return out
 
 
@@ -506,20 +587,7 @@ def save_stage_overrides(profile_name: str, stages: dict[str, dict[str, str]]) -
     profiles = raw.get("profiles")
     if not isinstance(profiles, dict):
         profiles = {}
-    cleaned: dict[str, dict[str, str]] = {}
-    for stage in STAGE_IDS:
-        cfg = stages.get(stage) or {}
-        if not isinstance(cfg, dict):
-            continue
-        item: dict[str, str] = {}
-        if cfg.get("provider"):
-            item["provider"] = str(cfg["provider"]).strip()
-        if cfg.get("model"):
-            item["model"] = str(cfg["model"]).strip()
-        if item.get("provider") and item.get("model"):
-            item["model"] = resolve_model_for_provider(item["provider"], item["model"])
-        if item:
-            cleaned[stage] = item
+    cleaned = normalize_stage_overrides(stages)
     profiles[profile_name] = cleaned
     raw["profiles"] = profiles
     _write_json(_stages_path(), raw)

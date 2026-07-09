@@ -55,9 +55,9 @@ def _test_workspace_context() -> None:
         from .providers.prompts import build_messages
 
         messages = build_messages(
-            stage="plan",
+            stage="ui_review",
             goal="Add workspace reader",
-            stage_config=load_profile("daily-dev-stub").stage("plan"),
+            stage_config=load_profile("daily-dev-stub").stage("ui_review"),
             inputs={"workspace_context": ctx},
         )
         system = messages[0]["content"]
@@ -75,30 +75,48 @@ def _test_workspace_context() -> None:
         )
         if not started.get("workspace"):
             raise AssertionError("start_run should record workspace")
+        if started.get("next_stage") != "ui_review":
+            raise AssertionError("start_run should default to ui_review")
         if "AGENTS.md" not in (started.get("context_sources") or []):
             raise AssertionError("start_run should list context sources")
 
         run_id = started["run_id"]
-        result = engine.dispatch_stage(run_id, "plan")
+        result = engine.dispatch_stage(run_id, "ui_review")
         if not result.get("ok"):
-            raise AssertionError(result.get("error") or "plan dispatch failed")
+            raise AssertionError(result.get("error") or "ui_review dispatch failed")
 
         del os.environ["ORCHESTRATOR_MCP_DATA"]
 
 def _test_stub_pipeline() -> str:
     engine = Orchestrator()
+    full = engine.run_pipeline(
+        goal="Self-test full role-based review flow",
+        profile_name="daily-dev-stub",
+    )
+    if full.get("stages_executed") != ["ui_review", "code_review", "general_review"]:
+        raise AssertionError("full pipeline should execute all review roles in order")
+    full_handoffs = full.get("handoffs") or {}
+    for stage in ("ui_review", "code_review", "general_review"):
+        if stage not in full_handoffs:
+            raise AssertionError(f"missing handoff for {stage}")
+
     result = engine.run_pipeline(
         goal="Self-test orchestrator MCP framework",
         profile_name="daily-dev-stub",
-        stage_overrides={"plan": {"provider": "stub", "model": "stub-planner-v2"}},
+        stage_overrides={"code_review": {"model": "stub/stub-code-reviewer"}},
+        stage="code_review",
     )
     run = result.get("run") or {}
     if run.get("status") != "completed":
         raise AssertionError(f"stub pipeline not completed: {run.get('status')}")
     handoffs = result.get("handoffs") or {}
-    for stage in ("plan", "code", "review", "deliver"):
-        if stage not in handoffs:
-            raise AssertionError(f"missing handoff for {stage}")
+    if "code_review" not in handoffs:
+        raise AssertionError("missing handoff for code_review")
+    if result.get("stages_executed") != ["code_review"]:
+        raise AssertionError("single-stage run should only execute code_review")
+    executions = result.get("executions") or []
+    if executions and executions[0].get("provider") != "stub":
+        raise AssertionError("stage shorthand did not normalize to stub provider")
     return str(run.get("id"))
 
 
@@ -128,8 +146,8 @@ def _test_config_store_roundtrip() -> None:
             config_store.save_stage_overrides(
                 "daily-dev-stub",
                 {
-                    "plan": {"provider": "stub", "model": "stub-planner-v2"},
-                    "code": {"provider": "stub", "model": "stub-coder"},
+                    "review": {"model": "stub/stub-general-reviewer"},
+                    "ui_review": {"model": "stub/stub-ui-reviewer"},
                 },
             )
             if config_store.get_active_profile_name() != "daily-dev":
@@ -153,8 +171,11 @@ def _test_config_store_roundtrip() -> None:
                 raise AssertionError("custom model not persisted")
 
             ui = config_store.get_profile_stages_for_ui("daily-dev-stub")
-            plan = next(s for s in ui["stages"] if s["stage"] == "plan")
-            if plan["provider"] != "stub" or plan["model"] != "stub-planner-v2":
+            ui_review = next(s for s in ui["stages"] if s["stage"] == "ui_review")
+            general_review = next(s for s in ui["stages"] if s["stage"] == "general_review")
+            if ui_review["provider"] != "stub" or ui_review["model"] != "stub-ui-reviewer":
+                raise AssertionError("ui_review override not applied")
+            if general_review["provider"] != "stub" or general_review["model"] != "stub-general-reviewer":
                 raise AssertionError("stage override not applied")
 
             providers_path = Path(tmp) / "providers.local.json"
@@ -186,18 +207,18 @@ def _test_config_store_roundtrip() -> None:
             os.environ["DEEPSEEK_API_KEY"] = saved_deepseek
 
 
-def _test_live_plan_optional() -> None:
+def _test_live_review_optional() -> None:
     if os.environ.get("ORCHESTRATOR_LIVE_TEST", "").strip().lower() not in ("1", "true", "yes"):
         return
     engine = Orchestrator()
-    started = engine.start_run(goal="Say hello in plan summary", profile_name="daily-dev")
+    started = engine.start_run(goal="Review this smoke-test goal", profile_name="daily-dev", stage="general_review")
     run_id = started["run_id"]
-    result = engine.dispatch_stage(run_id, "plan")
+    result = engine.dispatch_stage(run_id, "general_review")
     if not result.get("ok"):
-        raise AssertionError(result.get("error") or "plan dispatch failed")
+        raise AssertionError(result.get("error") or "general_review dispatch failed")
     handoff = result.get("handoff") or {}
-    if handoff.get("schema") != "plan.v1":
-        raise AssertionError("live plan handoff invalid")
+    if handoff.get("schema") != "review.v1":
+        raise AssertionError("live review handoff invalid")
 
 
 def run_self_test() -> int:
@@ -208,7 +229,7 @@ def run_self_test() -> int:
         _test_workspace_context()
         run_id = _test_stub_pipeline()
         _test_config_store_roundtrip()
-        _test_live_plan_optional()
+        _test_live_review_optional()
     except Exception as exc:
         print(str(exc), file=sys.stderr)
         return 1
