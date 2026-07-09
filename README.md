@@ -20,6 +20,35 @@ cd orchestrator-mcp
 ORCHESTRATOR_LIVE_TEST=1 ./verify.sh
 ```
 
+## 启动入口
+
+这个仓库有两个独立入口：
+
+- `./start.sh`
+  启动 MCP 服务，默认地址 `http://127.0.0.1:18067/mcp`
+- `./start-webui.sh`
+  启动 WebUI 配置页，默认地址 `http://127.0.0.1:18068`
+
+如果你只想改 Provider、默认模型、Stage 覆盖，直接启动 WebUI：
+
+```bash
+cd orchestrator-mcp
+./start-webui.sh
+```
+
+如果你要让 Cursor / Codex / 其他 MCP Client 真正调用这个服务，再另外启动 MCP：
+
+```bash
+cd orchestrator-mcp
+./start.sh
+```
+
+说明：
+
+- WebUI 不是 MCP tool，本身不会出现在工具列表里
+- WebUI 只是本地配置界面；真正暴露给 MCP Client 的是 `orchestrate_*` 这些工具
+- 默认端口可通过 `ORCHESTRATOR_WEBUI_HOST`、`ORCHESTRATOR_WEBUI_PORT`、`ORCHESTRATOR_MCP_HOST`、`ORCHESTRATOR_MCP_PORT` 覆盖
+
 ## Web 配置界面
 
 | 功能 | 说明 |
