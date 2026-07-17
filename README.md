@@ -20,6 +20,31 @@ cd orchestrator-mcp
 ORCHESTRATOR_LIVE_TEST=1 ./verify.sh
 ```
 
+## 本机可靠部署（Codex + launchd）
+
+本机唯一代码源固定为 `/Users/xiaomao11/project/orchestrator-mcp`。不要再从
+`~/orchestrator-mcp` 或项目内 `.mcp/orchestrator-mcp` 启动副本。
+
+```bash
+cd /Users/xiaomao11/project/orchestrator-mcp
+./scripts/install-local.sh
+./scripts/orchestrator-doctor.sh
+```
+
+安装器会：
+
+- 修复/准备可迁移 venv，并始终通过 `python -m pip` 安装依赖；
+- 将 Codex 配置为 per-session stdio，由 `CODEX_THREAD_ID` 隔离进程；
+- 将 launchd HTTP MCP 固定到 18067，WebUI 固定到 18068；
+- 备份现有 Codex 配置和 launchd plist；
+- 等待 launchd job 完成卸载、重新加载并真正开始监听后才返回成功。
+
+`doctor` 同时检查配置路径、transport、plist、监听数量和进程 cwd。安装后需要新建
+Codex 任务或重启 Codex/ChatGPT App，已有任务不会热注册新的 MCP 工具。
+
+评审调用必须提供真实可审查证据。仅传 workspace 时自动上下文包含 Git 状态和 diff stat，
+并不等价于 unified diff；代码评审应通过 `extra_context` 附带相关 diff、约束和验证结果。
+
 ## 启动入口
 
 这个仓库有两个独立入口：

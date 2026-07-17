@@ -23,6 +23,6 @@ if [[ ! -x "$VENV/bin/python" ]]; then
   "$PY" -m venv "$VENV"
 fi
 
-"$VENV/bin/pip" install -q -U pip
-"$VENV/bin/pip" install -q -r "$ROOT/requirements.txt"
+"$VENV/bin/python" -m pip install -q -U pip
+"$VENV/bin/python" -m pip install -q -r "$ROOT/requirements.txt"
 printf '%s\n' "$VENV/bin/python"

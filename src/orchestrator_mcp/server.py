@@ -15,6 +15,11 @@ from .context.workspace import load_workspace_context, resolve_workspace
 from .pipeline import Orchestrator, PipelineError
 from .profiles import STAGE_ORDER, list_profiles, load_profile, normalize_stage
 from .providers import get_provider, list_provider_status, normalize_provider, provider_configured
+from .session_runtime import (
+    install_shutdown_handlers,
+    register_current_process,
+    start_replacement_watchdog,
+)
 
 mcp = FastMCP(
     "orchestrator-mcp",
@@ -271,6 +276,10 @@ def orchestrate_stage_override(
 
 def main() -> None:
     transport = os.environ.get("ORCHESTRATOR_MCP_TRANSPORT", "streamable-http")
+    if transport == "stdio":
+        install_shutdown_handlers()
+        register_current_process()
+        start_replacement_watchdog()
     mcp.run(transport=transport)
 
 
