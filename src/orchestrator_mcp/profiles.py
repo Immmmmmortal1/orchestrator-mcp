@@ -8,12 +8,13 @@ import yaml
 
 from .credentials import normalize_provider
 from .config import profiles_dir
-from .config_store import get_active_profile_name, get_stage_overrides
+from .config_store import get_active_profile_name, get_role_overrides
 from .labels import profile_label_zh
 
 
-STAGE_ORDER = ("ui_review", "code_review", "general_review")
-STAGE_ALIASES = {
+REVIEW_ROLES = ("ui_review", "code_review", "general_review")
+REVIEW_ROLE_IDS = frozenset(REVIEW_ROLES)
+ROLE_ALIASES = {
     "review": "general_review",
     "ui": "ui_review",
     "code": "code_review",
@@ -23,13 +24,13 @@ STAGE_ALIASES = {
 }
 
 
-def normalize_stage(name: str | None) -> str:
+def normalize_role(name: str | None) -> str:
     key = (name or "").strip().lower().replace("-", "_")
-    return STAGE_ALIASES.get(key, key)
+    return ROLE_ALIASES.get(key, key)
 
 
 @dataclass
-class StageConfig:
+class RoleConfig:
     provider: str
     model: str
     output_schema: str
@@ -40,15 +41,15 @@ class StageConfig:
 class Profile:
     name: str
     description: str
-    stages: dict[str, StageConfig]
+    roles: dict[str, RoleConfig]
     max_review_rounds: int = 2
     skip_review: bool = False
 
-    def stage(self, name: str) -> StageConfig:
-        name = normalize_stage(name)
-        if name not in self.stages:
-            raise KeyError(f"unknown stage {name!r} in profile {self.name!r}")
-        return self.stages[name]
+    def role(self, name: str) -> RoleConfig:
+        name = normalize_role(name)
+        if name not in self.roles:
+            raise KeyError(f"unknown role {name!r} in profile {self.name!r}")
+        return self.roles[name]
 
 
 def load_profile(name: str) -> Profile:
@@ -56,52 +57,52 @@ def load_profile(name: str) -> Profile:
     if not path.is_file():
         raise FileNotFoundError(f"profile not found: {path}")
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    stages_raw: dict[str, Any] = raw.get("stages") or {}
-    stages: dict[str, StageConfig] = {}
-    for stage_name, cfg in stages_raw.items():
+    roles_raw: dict[str, Any] = raw.get("roles") or {}
+    roles: dict[str, RoleConfig] = {}
+    for role_name, cfg in roles_raw.items():
         if not isinstance(cfg, dict):
-            raise ValueError(f"invalid stage config for {stage_name}")
-        stage_key = normalize_stage(str(stage_name))
-        stages[stage_key] = StageConfig(
+            raise ValueError(f"invalid role config for {role_name}")
+        role_key = normalize_role(str(role_name))
+        roles[role_key] = RoleConfig(
             provider=normalize_provider(str(cfg.get("provider", "stub"))),
             model=str(cfg.get("model", "stub")),
             output_schema=str(cfg.get("output_schema", "")),
             skills=list(cfg.get("skills") or []),
         )
-    fallback_stage = stages.get("general_review") or next(iter(stages.values()), None)
-    if fallback_stage:
-        for stage_name in STAGE_ORDER:
-            stages.setdefault(
-                stage_name,
-                StageConfig(
-                    provider=fallback_stage.provider,
-                    model=fallback_stage.model,
-                    output_schema=fallback_stage.output_schema,
-                    skills=list(fallback_stage.skills),
+    fallback_role = roles.get("general_review") or next(iter(roles.values()), None)
+    if fallback_role:
+        for role_name in REVIEW_ROLES:
+            roles.setdefault(
+                role_name,
+                RoleConfig(
+                    provider=fallback_role.provider,
+                    model=fallback_role.model,
+                    output_schema=fallback_role.output_schema,
+                    skills=list(fallback_role.skills),
                 ),
             )
     routing = raw.get("routing") or {}
     profile = Profile(
         name=str(raw.get("name") or name),
         description=str(raw.get("description") or ""),
-        stages=stages,
+        roles=roles,
         max_review_rounds=int(routing.get("max_review_rounds", 2)),
         skip_review=bool(routing.get("skip_review", False)),
     )
-    overrides = get_stage_overrides(profile.name)
+    overrides = get_role_overrides(profile.name)
     if overrides:
-        merged = dict(profile.stages)
-        for stage_name, ov in overrides.items():
-            if stage_name not in merged:
+        merged = dict(profile.roles)
+        for role_name, ov in overrides.items():
+            if role_name not in merged:
                 continue
-            base = merged[stage_name]
-            merged[stage_name] = StageConfig(
+            base = merged[role_name]
+            merged[role_name] = RoleConfig(
                 provider=normalize_provider(ov.get("provider") or base.provider),
                 model=str(ov.get("model") or base.model),
                 output_schema=base.output_schema,
                 skills=list(base.skills),
             )
-        profile.stages = merged
+        profile.roles = merged
     return profile
 
 

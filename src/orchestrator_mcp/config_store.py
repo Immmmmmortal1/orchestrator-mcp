@@ -5,11 +5,11 @@ from pathlib import Path
 from typing import Any
 
 from .config import data_dir
-from .labels import profile_label_zh, provider_label_zh, schema_label_zh, source_label_zh, stage_label_zh
+from .labels import profile_label_zh, provider_label_zh, schema_label_zh, source_label_zh, role_label_zh
 
 PROVIDER_IDS = ("deepseek", "moonshot", "zhipu", "openai", "codex-lb")
-STAGE_IDS = ("ui_review", "code_review", "general_review")
-_STAGE_ALIASES = {
+REVIEW_ROLE_IDS = ("ui_review", "code_review", "general_review")
+_ROLE_ALIASES = {
     "review": "general_review",
     "ui": "ui_review",
     "code": "code_review",
@@ -81,13 +81,10 @@ _MODEL_SUGGESTIONS: dict[str, list[str]] = {
     "codex-lb": ["gpt-5.4", "gpt-5", "gpt-4o"],
     "stub": [
         "stub",
-        "stub-planner",
-        "stub-coder",
         "stub-reviewer",
         "stub-ui-reviewer",
         "stub-code-reviewer",
         "stub-general-reviewer",
-        "stub-deliver",
     ],
 }
 
@@ -280,8 +277,19 @@ def _providers_path() -> Path:
     return data_dir() / "providers.local.json"
 
 
-def _stages_path() -> Path:
-    return data_dir() / "stages.local.json"
+def _roles_path() -> Path:
+    return data_dir() / "roles.local.json"
+
+
+def _load_roles_document() -> dict[str, Any]:
+    current = _read_json(_roles_path())
+    if current:
+        return current
+    # One-time read compatibility for installations created before role naming.
+    legacy = _read_json(data_dir() / "stages.local.json")
+    if legacy:
+        _write_json(_roles_path(), legacy)
+    return legacy
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -471,14 +479,14 @@ def update_provider_from_ui(
     )
 
 
-def load_stages_local() -> dict[str, Any]:
-    raw = _read_json(_stages_path())
+def load_roles_local() -> dict[str, Any]:
+    raw = _load_roles_document()
     profiles = raw.get("profiles")
     return profiles if isinstance(profiles, dict) else {}
 
 
 def get_active_profile_name() -> str:
-    raw = _read_json(_stages_path())
+    raw = _load_roles_document()
     name = str(raw.get("active_profile") or "daily-dev").strip()
     return name or "daily-dev"
 
@@ -492,20 +500,20 @@ def resolve_profile_name(name: str | None = None) -> str:
 
 
 def set_active_profile_name(name: str) -> None:
-    raw = _read_json(_stages_path())
+    raw = _load_roles_document()
     raw["version"] = 1
     raw["active_profile"] = name.strip()
     if "profiles" not in raw or not isinstance(raw.get("profiles"), dict):
-        raw["profiles"] = load_stages_local()
-    _write_json(_stages_path(), raw)
+        raw["profiles"] = load_roles_local()
+    _write_json(_roles_path(), raw)
 
 
-def get_stage_overrides(profile_name: str) -> dict[str, dict[str, str]]:
-    profiles = load_stages_local()
+def get_role_overrides(profile_name: str) -> dict[str, dict[str, str]]:
+    profiles = load_roles_local()
     raw = profiles.get(profile_name) or {}
     if not isinstance(raw, dict):
         return {}
-    return normalize_stage_overrides(raw)
+    return normalize_role_overrides(raw)
 
 
 def _split_provider_model(value: str) -> tuple[str, str] | None:
@@ -522,17 +530,17 @@ def _split_provider_model(value: str) -> tuple[str, str] | None:
     return provider, model_part.strip()
 
 
-def normalize_stage_id(name: str | None) -> str:
+def normalize_role_id(name: str | None) -> str:
     key = (name or "").strip().lower().replace("-", "_")
-    return _STAGE_ALIASES.get(key, key)
+    return _ROLE_ALIASES.get(key, key)
 
 
-def normalize_stage_overrides(
+def normalize_role_overrides(
     raw: dict[str, Any] | None,
     *,
-    default_stage: str = "general_review",
+    default_role: str = "general_review",
 ) -> dict[str, dict[str, str]]:
-    """Normalize WebUI/MCP stage overrides into {stage: {provider, model}}.
+    """Normalize WebUI/MCP role overrides into {role: {provider, model}}.
 
     This keeps MCP callers from guessing the exact shape. Supported forms:
     - {"ui_review": {"provider": "codex-lb", "model": "gpt-5.4"}}
@@ -544,18 +552,18 @@ def normalize_stage_overrides(
     if not isinstance(raw, dict):
         return {}
 
-    stage_source: dict[str, Any]
+    role_source: dict[str, Any]
     if any(k in raw for k in ("provider", "model")):
-        stage_source = {normalize_stage_id(default_stage): raw}
+        role_source = {normalize_role_id(default_role): raw}
     else:
-        stage_source = {
-            normalize_stage_id(str(stage)): cfg
-            for stage, cfg in raw.items()
+        role_source = {
+            normalize_role_id(str(role)): cfg
+            for role, cfg in raw.items()
         }
 
     out: dict[str, dict[str, str]] = {}
-    for stage in STAGE_IDS:
-        cfg = stage_source.get(stage)
+    for role in REVIEW_ROLE_IDS:
+        cfg = role_source.get(role)
         if not isinstance(cfg, dict):
             continue
 
@@ -577,43 +585,43 @@ def normalize_stage_overrides(
                 model = resolve_model_for_provider(provider, model)
             item["model"] = model
         if item:
-            out[stage] = item
+            out[role] = item
     return out
 
 
-def save_stage_overrides(profile_name: str, stages: dict[str, dict[str, str]]) -> None:
-    raw = _read_json(_stages_path())
+def save_role_overrides(profile_name: str, roles: dict[str, dict[str, str]]) -> None:
+    raw = _load_roles_document()
     raw["version"] = 1
     profiles = raw.get("profiles")
     if not isinstance(profiles, dict):
         profiles = {}
-    cleaned = normalize_stage_overrides(stages)
+    cleaned = normalize_role_overrides(roles)
     profiles[profile_name] = cleaned
     raw["profiles"] = profiles
-    _write_json(_stages_path(), raw)
+    _write_json(_roles_path(), raw)
     clear_config_cache()
 
 
-def get_profile_stages_for_ui(profile_name: str) -> dict[str, Any]:
-    from .profiles import STAGE_ORDER, load_profile
+def get_profile_roles_for_ui(profile_name: str) -> dict[str, Any]:
+    from .profiles import REVIEW_ROLES, load_profile
 
     profile = load_profile(profile_name)
-    overrides = get_stage_overrides(profile_name)
-    stages: list[dict[str, Any]] = []
-    for stage in STAGE_ORDER:
-        base = profile.stages[stage]
-        ov = overrides.get(stage) or {}
+    overrides = get_role_overrides(profile_name)
+    roles: list[dict[str, Any]] = []
+    for role in REVIEW_ROLES:
+        base = profile.roles[role]
+        ov = overrides.get(role) or {}
         provider = ov.get("provider") or base.provider
         model = ov.get("model") or base.model
         model_mismatch = bool(model) and not model_valid_for_provider(provider, model)
         suggested_model = resolve_model_for_provider(provider, model)
-        stage_labels = stage_label_zh(stage)
+        role_labels = role_label_zh(role)
         prov_labels = provider_label_zh(provider)
-        stages.append(
+        roles.append(
             {
-                "stage": stage,
-                "label_zh": stage_labels["label_zh"],
-                "description_zh": stage_labels["description_zh"],
+                "role": role,
+                "label_zh": role_labels["label_zh"],
+                "description_zh": role_labels["description_zh"],
                 "provider": provider,
                 "provider_label_zh": prov_labels["label_zh"],
                 "model": model,
@@ -649,7 +657,7 @@ def get_profile_stages_for_ui(profile_name: str) -> dict[str, Any]:
         "description": profile.description,
         "description_zh": profile_labels["description_zh"],
         "active_profile": get_active_profile_name(),
-        "stages": stages,
+        "roles": roles,
         "provider_options": [_provider_option(p) for p in PROVIDER_IDS]
         + [_provider_option("stub")],
         "provider_models": provider_models_for_ui(),

@@ -1,7 +1,7 @@
-name: example-kimi-plan
+name: example-kimi-review
 description: Example role-based review profile with different models per reviewer
 
-stages:
+roles:
   ui_review:
     provider: moonshot
     model: kimi-k2.6

@@ -7,15 +7,15 @@ import tempfile
 from pathlib import Path
 
 from .context.workspace import format_workspace_context_for_prompt, load_workspace_context
-from .pipeline import Orchestrator
+from .review import Orchestrator
 from .providers import get_provider, list_provider_status, normalize_provider
 from .providers.openai_compat import _extract_json
 
 
 def _test_json_extract() -> None:
-    sample = '```json\n{"schema":"plan.v1","summary":"x","tasks":[{"id":"T1","desc":"d"}],"acceptance":[],"risks":[]}\n```'
+    sample = '```json\n{"schema":"review.v1","verdict":"pass","blocking":[],"suggestions":[]}\n```'
     parsed = _extract_json(sample)
-    assert parsed["schema"] == "plan.v1"
+    assert parsed["schema"] == "review.v1"
 
 
 def _test_provider_registry() -> None:
@@ -55,9 +55,9 @@ def _test_workspace_context() -> None:
         from .providers.prompts import build_messages
 
         messages = build_messages(
-            stage="ui_review",
+            role="ui_review",
             goal="Add workspace reader",
-            stage_config=load_profile("daily-dev-stub").stage("ui_review"),
+            role_config=load_profile("daily-dev-stub").role("ui_review"),
             inputs={"workspace_context": ctx},
         )
         system = messages[0]["content"]
@@ -68,56 +68,43 @@ def _test_workspace_context() -> None:
         (root / "data").mkdir()
         engine = Orchestrator()
         started = engine.start_run(
-            goal="Workspace pipeline test",
+            goal="Workspace review test",
             profile_name="daily-dev-stub",
+            role="ui_review",
             workspace=str(root),
             extra_context="Mid-run note from client",
         )
         if not started.get("workspace"):
             raise AssertionError("start_run should record workspace")
-        if started.get("next_stage") != "ui_review":
-            raise AssertionError("start_run should default to ui_review")
+        if started.get("role") != "ui_review":
+            raise AssertionError("start_run should preserve selected review role")
         if "AGENTS.md" not in (started.get("context_sources") or []):
             raise AssertionError("start_run should list context sources")
 
         run_id = started["run_id"]
-        result = engine.dispatch_stage(run_id, "ui_review")
+        result = engine.dispatch_role(run_id)
         if not result.get("ok"):
             raise AssertionError(result.get("error") or "ui_review dispatch failed")
 
         del os.environ["ORCHESTRATOR_MCP_DATA"]
 
-def _test_stub_pipeline() -> str:
+def _test_stub_single_role() -> str:
     engine = Orchestrator()
-    full = engine.run_pipeline(
-        goal="Self-test full role-based review flow",
-        profile_name="daily-dev-stub",
-    )
-    if full.get("stages_executed") != ["ui_review", "code_review", "general_review"]:
-        raise AssertionError("full pipeline should execute all review roles in order")
-    full_handoffs = full.get("handoffs") or {}
-    for stage in ("ui_review", "code_review", "general_review"):
-        if stage not in full_handoffs:
-            raise AssertionError(f"missing handoff for {stage}")
-
-    result = engine.run_pipeline(
+    started = engine.start_run(
         goal="Self-test orchestrator MCP framework",
         profile_name="daily-dev-stub",
-        stage_overrides={"code_review": {"model": "stub/stub-code-reviewer"}},
-        stage="code_review",
+        role="code_review",
+        role_overrides={"code_review": {"model": "stub/stub-code-reviewer"}},
     )
-    run = result.get("run") or {}
-    if run.get("status") != "completed":
-        raise AssertionError(f"stub pipeline not completed: {run.get('status')}")
-    handoffs = result.get("handoffs") or {}
-    if "code_review" not in handoffs:
+    result = engine.dispatch_role(started["run_id"])
+    if result.get("status") != "completed":
+        raise AssertionError(f"stub review run not completed: {result.get('status')}")
+    if result.get("role") != "code_review" or not result.get("handoff"):
         raise AssertionError("missing handoff for code_review")
-    if result.get("stages_executed") != ["code_review"]:
-        raise AssertionError("single-stage run should only execute code_review")
     executions = result.get("executions") or []
     if executions and executions[0].get("provider") != "stub":
-        raise AssertionError("stage shorthand did not normalize to stub provider")
-    return str(run.get("id"))
+        raise AssertionError("role shorthand did not normalize to stub provider")
+    return str(started["run_id"])
 
 
 def _test_config_store_roundtrip() -> None:
@@ -143,7 +130,7 @@ def _test_config_store_roundtrip() -> None:
                 raise AssertionError("expected deepseek configured from local store")
 
             config_store.set_active_profile_name("daily-dev")
-            config_store.save_stage_overrides(
+            config_store.save_role_overrides(
                 "daily-dev-stub",
                 {
                     "review": {"model": "stub/stub-general-reviewer"},
@@ -151,7 +138,7 @@ def _test_config_store_roundtrip() -> None:
                 },
             )
             if config_store.get_active_profile_name() != "daily-dev":
-                raise AssertionError("save_stage_overrides must not change active_profile")
+                raise AssertionError("save_role_overrides must not change active_profile")
             if config_store.resolve_profile_name("") != "daily-dev":
                 raise AssertionError("resolve_profile_name should use active_profile")
             if config_store.resolve_profile_name("daily-dev-stub") != "daily-dev-stub":
@@ -170,17 +157,17 @@ def _test_config_store_roundtrip() -> None:
             if "deepseek-v4-pro" not in config_store.get_custom_models("deepseek"):
                 raise AssertionError("custom model not persisted")
 
-            ui = config_store.get_profile_stages_for_ui("daily-dev-stub")
-            ui_review = next(s for s in ui["stages"] if s["stage"] == "ui_review")
-            general_review = next(s for s in ui["stages"] if s["stage"] == "general_review")
+            ui = config_store.get_profile_roles_for_ui("daily-dev-stub")
+            ui_review = next(s for s in ui["roles"] if s["role"] == "ui_review")
+            general_review = next(s for s in ui["roles"] if s["role"] == "general_review")
             if ui_review["provider"] != "stub" or ui_review["model"] != "stub-ui-reviewer":
                 raise AssertionError("ui_review override not applied")
             if general_review["provider"] != "stub" or general_review["model"] != "stub-general-reviewer":
-                raise AssertionError("stage override not applied")
+                raise AssertionError("role override not applied")
 
             providers_path = Path(tmp) / "providers.local.json"
-            stages_path = Path(tmp) / "stages.local.json"
-            if not providers_path.is_file() or not stages_path.is_file():
+            roles_path = Path(tmp) / "roles.local.json"
+            if not providers_path.is_file() or not roles_path.is_file():
                 raise AssertionError("local config files not written")
 
             from fastapi.testclient import TestClient
@@ -211,9 +198,9 @@ def _test_live_review_optional() -> None:
     if os.environ.get("ORCHESTRATOR_LIVE_TEST", "").strip().lower() not in ("1", "true", "yes"):
         return
     engine = Orchestrator()
-    started = engine.start_run(goal="Review this smoke-test goal", profile_name="daily-dev", stage="general_review")
+    started = engine.start_run(goal="Review this smoke-test goal", profile_name="daily-dev", role="general_review")
     run_id = started["run_id"]
-    result = engine.dispatch_stage(run_id, "general_review")
+    result = engine.dispatch_role(run_id)
     if not result.get("ok"):
         raise AssertionError(result.get("error") or "general_review dispatch failed")
     handoff = result.get("handoff") or {}
@@ -227,7 +214,7 @@ def run_self_test() -> int:
         _test_provider_registry()
         _test_aliases()
         _test_workspace_context()
-        run_id = _test_stub_pipeline()
+        run_id = _test_stub_single_role()
         _test_config_store_roundtrip()
         _test_live_review_optional()
     except Exception as exc:

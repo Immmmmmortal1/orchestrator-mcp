@@ -1,7 +1,7 @@
 name: daily-dev
 description: Role-based review hub
 
-stages:
+roles:
   ui_review:
     provider: codex-lb
     model: gpt-5.4

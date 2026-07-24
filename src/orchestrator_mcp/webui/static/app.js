@@ -106,7 +106,7 @@ function providerCard(p) {
           <input type="text" name="default_model" list="models-${esc(p.provider)}" value="${esc(p.default_model || "")}" />
           <button type="button" class="btn-add-model" data-action="add-model" title="将输入的 model ID 加入候选列表">+ 添加</button>
         </div>
-        <small>Stage 未指定 model 时可作回退；须与厂商 API 文档中的 model 字符串完全一致（通常全小写）。</small>
+        <small>Role 未指定 model 时可作回退；须与厂商 API 文档中的 model 字符串完全一致（通常全小写）。</small>
         ${namingHint}
         ${customList}
         <datalist id="models-${esc(p.provider)}">${suggestions}</datalist>
@@ -276,10 +276,10 @@ function modelSelectHtml(providerId, selectedModel, extraModels = []) {
 }
 
 function modelPickerHtml(providerId, selectedModel, extraModels = []) {
-  return `<div class="model-picker">${modelSelectHtml(providerId, selectedModel, extraModels)}<button type="button" class="btn-add-model" data-action="add-stage-model" title="添加自定义 model ID 到该厂商列表">+ 添加</button></div>`;
+  return `<div class="model-picker">${modelSelectHtml(providerId, selectedModel, extraModels)}<button type="button" class="btn-add-model" data-action="add-role-model" title="添加自定义 model ID 到该厂商列表">+ 添加</button></div>`;
 }
 
-function refreshStageModelSelect(row, providerId, preferredModel) {
+function refreshRoleModelSelect(row, providerId, preferredModel) {
   const cell = row.querySelector(".model-cell");
   if (!cell) return;
   const nextModel = preferredModel || defaultModelForProvider(providerId);
@@ -287,7 +287,7 @@ function refreshStageModelSelect(row, providerId, preferredModel) {
   const warnHtml = warn ? warn.outerHTML : "";
   cell.innerHTML = `${modelPickerHtml(providerId, nextModel)}${warnHtml}`;
   bindModelSelectEvents(row);
-  bindStageAddModelButton(row);
+  bindRoleAddModelButton(row);
   updateRowMismatchState(row);
 }
 
@@ -346,8 +346,8 @@ function modelValidForProvider(providerId, model) {
   return false;
 }
 
-function bindStageAddModelButton(row) {
-  const btn = row.querySelector('[data-action="add-stage-model"]');
+function bindRoleAddModelButton(row) {
+  const btn = row.querySelector('[data-action="add-role-model"]');
   if (!btn || btn.dataset.bound) return;
   btn.dataset.bound = "1";
   btn.addEventListener("click", async () => {
@@ -357,7 +357,7 @@ function bindStageAddModelButton(row) {
     try {
       const added = await addProviderModel(providerSelect.value, modelSelect?.value || "");
       if (!added) return;
-      refreshStageModelSelect(row, providerSelect.value, added);
+      refreshRoleModelSelect(row, providerSelect.value, added);
       toast(`已添加并选中 ${added}`);
     } catch (e) {
       toast(e.message, 5000);
@@ -365,16 +365,16 @@ function bindStageAddModelButton(row) {
   });
 }
 
-function stageRow(s) {
+function roleRow(s) {
   const options = providerOptions
     .map((o) => {
       const selected = o.id === s.provider ? "selected" : "";
       return `<option value="${esc(o.id)}" ${selected}>${esc(providerOptionLabel(o))}</option>`;
     })
     .join("");
-  const override = s.overridden ? ' <span class="override" title="已被本地 stages.local.json 覆盖">*</span>' : "";
-  const stageTitle = s.label_zh || s.stage;
-  const stageDesc = s.description_zh
+  const override = s.overridden ? ' <span class="override" title="已被本地 roles.local.json 覆盖">*</span>' : "";
+  const roleTitle = s.label_zh || s.role;
+  const roleDesc = s.description_zh
     ? `<div class="cell-desc">${esc(s.description_zh)}</div>`
     : "";
   const schemaTitle = s.schema_label_zh || s.output_schema;
@@ -384,11 +384,11 @@ function stageRow(s) {
     : "";
 
   return `
-    <tr data-stage="${esc(s.stage)}" class="${s.model_mismatch ? "model-mismatch" : ""}" data-saved-model="${esc(s.model || "")}">
+    <tr data-role="${esc(s.role)}" class="${s.model_mismatch ? "model-mismatch" : ""}" data-saved-model="${esc(s.model || "")}">
       <td>
-        <strong>${esc(stageTitle)}</strong>${override}
-        <div class="cell-meta"><code>${esc(s.stage)}</code></div>
-        ${stageDesc}
+        <strong>${esc(roleTitle)}</strong>${override}
+        <div class="cell-meta"><code>${esc(s.role)}</code></div>
+        ${roleDesc}
       </td>
       <td><select name="provider">${options}</select></td>
       <td class="model-cell">
@@ -403,25 +403,25 @@ function stageRow(s) {
   `;
 }
 
-function bindStageRowEvents() {
-  document.querySelectorAll("#stages-body tr").forEach((row) => {
+function bindRoleRowEvents() {
+  document.querySelectorAll("#roles-body tr").forEach((row) => {
     const providerSelect = row.querySelector('[name="provider"]');
     if (!providerSelect || providerSelect.dataset.bound) return;
     providerSelect.dataset.bound = "1";
     providerSelect.addEventListener("change", () => {
-      refreshStageModelSelect(row, providerSelect.value);
+      refreshRoleModelSelect(row, providerSelect.value);
     });
     bindModelSelectEvents(row);
-    bindStageAddModelButton(row);
+    bindRoleAddModelButton(row);
     updateRowMismatchState(row);
   });
 }
 
-function renderProfileDesc(profileName, stageData) {
+function renderProfileDesc(profileName, roleData) {
   const box = document.getElementById("profile-desc");
   const fromList = profilesCache.find((p) => p.name === profileName);
-  const title = stageData?.label_zh || fromList?.label_zh || profileName;
-  const desc = stageData?.description_zh || fromList?.description_zh || fromList?.description || "";
+  const title = roleData?.label_zh || fromList?.label_zh || profileName;
+  const desc = roleData?.description_zh || fromList?.description_zh || fromList?.description || "";
   box.innerHTML = `
     <strong>${esc(title)}</strong>
     <span class="cell-meta"><code>${esc(profileName)}</code></span>
@@ -429,17 +429,17 @@ function renderProfileDesc(profileName, stageData) {
   `;
 }
 
-async function loadStages(profileName) {
-  const data = await api(`/api/profiles/${encodeURIComponent(profileName)}/stages`);
+async function loadRoles(profileName) {
+  const data = await api(`/api/profiles/${encodeURIComponent(profileName)}/roles`);
   providerOptions = data.provider_options || [];
   providerModels = data.provider_models || {};
-  const tbody = document.getElementById("stages-body");
-  tbody.innerHTML = (data.stages || []).map(stageRow).join("");
-  bindStageRowEvents();
+  const tbody = document.getElementById("roles-body");
+  tbody.innerHTML = (data.roles || []).map(roleRow).join("");
+  bindRoleRowEvents();
   renderProfileDesc(profileName, data);
-  const mismatches = (data.stages || []).filter((s) => s.model_mismatch).length;
+  const mismatches = (data.roles || []).filter((s) => s.model_mismatch).length;
   if (mismatches) {
-    toast(`有 ${mismatches} 个 Stage 的模型与厂商不匹配，已填入建议值，请确认后保存`, 4200);
+    toast(`有 ${mismatches} 个 Role 的模型与厂商不匹配，已填入建议值，请确认后保存`, 4200);
   }
 }
 
@@ -460,7 +460,7 @@ async function loadProfiles() {
     select.dataset.bound = "1";
     select.addEventListener("change", () => {
       syncDefaultCheckbox(select.value);
-      loadStages(select.value);
+      loadRoles(select.value);
     });
     document.getElementById("set-default-profile")?.addEventListener("change", () => {
       /* user toggles intent before save */
@@ -468,31 +468,31 @@ async function loadProfiles() {
   }
   syncDefaultCheckbox(select.value);
   updateActiveProfileHint();
-  await loadStages(select.value);
+  await loadRoles(select.value);
 }
 
-document.getElementById("save-stages").addEventListener("click", async () => {
+document.getElementById("save-roles").addEventListener("click", async () => {
   const select = document.getElementById("profile-select");
   const profile = select.value;
   const setAsDefault = document.getElementById("set-default-profile")?.checked ?? false;
-  const stages = {};
-  document.querySelectorAll("#stages-body tr").forEach((row) => {
-    const stage = row.dataset.stage;
+  const roles = {};
+  document.querySelectorAll("#roles-body tr").forEach((row) => {
+    const role = row.dataset.role;
     const provider = row.querySelector('[name="provider"]').value;
     let model = row.querySelector('[name="model"]').value.trim();
     if (!modelValidForProvider(provider, model)) {
       model = defaultModelForProvider(provider);
-      refreshStageModelSelect(row, provider, model);
+      refreshRoleModelSelect(row, provider, model);
     }
-    stages[stage] = { provider, model };
+    roles[role] = { provider, model };
   });
-  await api(`/api/profiles/${encodeURIComponent(profile)}/stages`, {
+  await api(`/api/profiles/${encodeURIComponent(profile)}/roles`, {
     method: "PUT",
-    body: JSON.stringify({ stages, set_as_default: setAsDefault }),
+    body: JSON.stringify({ roles, set_as_default: setAsDefault }),
   });
   const label = profilesCache.find((p) => p.name === profile)?.label_zh || profile;
   const defaultNote = setAsDefault ? "，并已设为 MCP 默认 Profile" : "（未更改 MCP 默认 Profile）";
-  toast(`编排方案「${label}」Stage 配置已保存${defaultNote}`);
+  toast(`编排方案「${label}」Role 配置已保存${defaultNote}`);
   if (setAsDefault) {
     activeProfileName = profile;
   }
@@ -509,7 +509,7 @@ document.getElementById("save-stages").addEventListener("click", async () => {
   select.value = profile;
   syncDefaultCheckbox(profile);
   updateActiveProfileHint();
-  await loadStages(profile);
+  await loadRoles(profile);
 });
 
 loadProviders().catch((e) => toast(e.message, 5000));
@@ -567,7 +567,7 @@ function renderGuide(info) {
     <div class="guide-card">
       <h2>MCP 工具（在 Cursor Agent 里调用）</h2>
       <ul class="tool-list">${tools}</ul>
-      <p class="cell-desc">典型用法：先 <code>orchestrate_effective_config(stage="ui_review")</code> 确认角色配置，再用 <code>orchestrate_run_pipeline(stage="ui_review")</code> 跑指定审查；不传 stage 时会依次跑三类审查。</p>
+      <p class="cell-desc">典型用法：先用 <code>orchestrate_run_start(goal, role="ui_review")</code> 创建单角色审查任务，再用 <code>orchestrate_dispatch(run_id)</code> 执行；每个 run 只绑定一个 Review 角色。</p>
     </div>
 
     <div class="guide-card">

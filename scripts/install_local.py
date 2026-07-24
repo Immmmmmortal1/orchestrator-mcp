@@ -126,7 +126,7 @@ def _migrate_legacy_data(root: Path, stamp: str) -> list[str]:
     if marker.exists() or not LEGACY_ROOT.is_dir():
         return []
     migrated: list[str] = []
-    for name in ("providers.local.json", "stages.local.json"):
+    for name in ("providers.local.json", "roles.local.json"):
         source = LEGACY_ROOT / "data" / name
         target = root / "data" / name
         if source.is_file() and not target.exists():

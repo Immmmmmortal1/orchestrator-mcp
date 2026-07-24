@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from ..profiles import Profile, StageConfig
+from ..profiles import Profile, RoleConfig
 from .base import ProviderResult
 from ..credentials import api_key_for_provider, base_url_for_provider, normalize_provider
 from .prompts import build_messages
@@ -97,12 +97,12 @@ class OpenAICompatibleProvider:
             default=self.base_url,
         )
 
-    def run_stage(
+    def run_role(
         self,
         *,
-        stage: str,
+        role: str,
         goal: str,
-        stage_config: StageConfig,
+        role_config: RoleConfig,
         inputs: dict[str, Any],
         profile: Profile,
     ) -> ProviderResult:
@@ -113,11 +113,11 @@ class OpenAICompatibleProvider:
                 f"{self.name} API key not configured "
                 f"(set env or add label in ~/Desktop/服务器.md)"
             )
-        model = stage_config.model or self.default_model
+        model = role_config.model or self.default_model
         messages = build_messages(
-            stage=stage,
+            role=role,
             goal=goal,
-            stage_config=stage_config,
+            role_config=role_config,
             inputs=inputs,
         )
         raw_text, tokens = chat_completions(

@@ -38,19 +38,11 @@ PROVIDER_LABELS_ZH: dict[str, dict[str, str]] = {
     "stub": {
         "label_zh": "Stub 离线",
         "vendor_zh": "内置占位",
-        "description_zh": "不调真实 API，仅用于自测 pipeline。",
+        "description_zh": "不调真实 API，仅用于离线验证 review 角色。",
     },
 }
 
-STAGE_LABELS_ZH: dict[str, dict[str, str]] = {
-    "plan": {
-        "label_zh": "规划 Plan",
-        "description_zh": "拆任务、验收标准、风险；产出 plan.v1。",
-    },
-    "code": {
-        "label_zh": "编码 Code",
-        "description_zh": "按规划生成改动说明；产出 code_handoff.v1（不直接改仓库）。",
-    },
+ROLE_LABELS_ZH: dict[str, dict[str, str]] = {
     "review": {
         "label_zh": "审查 Review",
         "description_zh": "基于调用者提供的证据做 pass/revise 审查。",
@@ -67,17 +59,10 @@ STAGE_LABELS_ZH: dict[str, dict[str, str]] = {
         "label_zh": "通用审查",
         "description_zh": "审查需求完整性、产品流程、边界场景与非 UI/代码专项问题。",
     },
-    "deliver": {
-        "label_zh": "交付 Deliver",
-        "description_zh": "汇总结论、下一步与交付说明；产出 deliver.v1。",
-    },
 }
 
 SCHEMA_LABELS_ZH: dict[str, str] = {
-    "plan.v1": "规划 JSON 结构",
-    "code_handoff.v1": "编码交接 JSON",
     "review.v1": "审查结果 JSON",
-    "deliver.v1": "交付摘要 JSON",
 }
 
 PROFILE_LABELS_ZH: dict[str, dict[str, str]] = {
@@ -87,9 +72,9 @@ PROFILE_LABELS_ZH: dict[str, dict[str, str]] = {
     },
     "daily-dev": {
         "label_zh": "日常开发",
-        "description_zh": "UI / 代码 / 通用三类审查角色；provider/model 可在 WebUI Stages 中覆盖。",
+        "description_zh": "UI / 代码 / 通用三类审查角色；provider/model 可在 WebUI Roles 中覆盖。",
     },
-    "example-kimi-plan": {
+    "example-kimi-review": {
         "label_zh": "多模型审查示例",
         "description_zh": "演示按 UI / 代码 / 通用审查角色分别选择模型。",
     },
@@ -102,7 +87,7 @@ FIELD_LABELS_ZH: dict[str, str] = {
     "provider": "模型厂商",
     "model": "模型 ID",
     "schema": "交接 Schema",
-    "profile": "编排方案 (Profile)",
+    "profile": "Review 角色方案 (Profile)",
 }
 
 
@@ -119,10 +104,10 @@ def provider_label_zh(provider: str) -> dict[str, str]:
     }
 
 
-def stage_label_zh(stage: str) -> dict[str, str]:
-    meta = STAGE_LABELS_ZH.get(stage, {})
+def role_label_zh(role: str) -> dict[str, str]:
+    meta = ROLE_LABELS_ZH.get(role, {})
     return {
-        "label_zh": meta.get("label_zh", stage),
+        "label_zh": meta.get("label_zh", role),
         "description_zh": meta.get("description_zh", ""),
     }
 

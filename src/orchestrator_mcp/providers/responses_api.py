@@ -5,7 +5,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from ..profiles import Profile, StageConfig
+from ..profiles import Profile, RoleConfig
 from .base import ProviderResult
 from .openai_compat import OpenAICompatibleProvider, _extract_json, chat_completions
 from .prompts import build_messages
@@ -142,12 +142,12 @@ class ResponsesAPIProvider(OpenAICompatibleProvider):
         )
         self.default_reasoning_effort = default_reasoning_effort
 
-    def run_stage(
+    def run_role(
         self,
         *,
-        stage: str,
+        role: str,
         goal: str,
-        stage_config: StageConfig,
+        role_config: RoleConfig,
         inputs: dict[str, Any],
         profile: Profile,
     ) -> ProviderResult:
@@ -156,12 +156,12 @@ class ResponsesAPIProvider(OpenAICompatibleProvider):
         if not api_key:
             raise RuntimeError(f"{self.name} API key not configured")
 
-        model = stage_config.model or self.default_model
+        model = role_config.model or self.default_model
         effort = get_local_reasoning_effort(self.name) or self.default_reasoning_effort
         messages = build_messages(
-            stage=stage,
+            role=role,
             goal=goal,
-            stage_config=stage_config,
+            role_config=role_config,
             inputs=inputs,
         )
         raw_text, tokens = responses_create(
@@ -185,12 +185,12 @@ class ResponsesAPIProvider(OpenAICompatibleProvider):
 class HybridOpenAIProvider(OpenAICompatibleProvider):
     """Pick chat/completions or responses based on WebUI `wire_api` setting."""
 
-    def run_stage(
+    def run_role(
         self,
         *,
-        stage: str,
+        role: str,
         goal: str,
-        stage_config: StageConfig,
+        role_config: RoleConfig,
         inputs: dict[str, Any],
         profile: Profile,
     ) -> ProviderResult:
@@ -202,17 +202,17 @@ class HybridOpenAIProvider(OpenAICompatibleProvider):
                 default_model=self.default_model,
                 env_base_url=self.env_base_url,
             )
-            return delegate.run_stage(
-                stage=stage,
+            return delegate.run_role(
+                role=role,
                 goal=goal,
-                stage_config=stage_config,
+                role_config=role_config,
                 inputs=inputs,
                 profile=profile,
             )
-        return super().run_stage(
-            stage=stage,
+        return super().run_role(
+            role=role,
             goal=goal,
-            stage_config=stage_config,
+            role_config=role_config,
             inputs=inputs,
             profile=profile,
         )

@@ -1,7 +1,7 @@
 name: daily-dev-stub
 description: Stub-only role-based review flow for offline self-test (no LLM API calls)
 
-stages:
+roles:
   ui_review:
     provider: stub
     model: stub-ui-reviewer

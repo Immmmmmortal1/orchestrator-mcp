@@ -10,14 +10,14 @@
   <header class="topbar">
     <div>
       <h1>多模型编排 MCP</h1>
-      <p class="subtitle">厂商凭证 · 流水线 Stage 模型配置</p>
+      <p class="subtitle">厂商凭证 · Review 角色模型配置</p>
     </div>
     <div id="toast" class="toast hidden"></div>
   </header>
 
   <nav class="tabs">
     <button class="tab active" data-tab="providers">模型厂商 Provider</button>
-    <button class="tab" data-tab="stages">流水线 Stage</button>
+    <button class="tab" data-tab="roles">Review 角色</button>
     <button class="tab" data-tab="guide">MCP 使用指南</button>
   </nav>
 
@@ -31,7 +31,7 @@
       <div id="providers-grid" class="grid"></div>
     </section>
 
-    <section id="panel-stages" class="panel">
+    <section id="panel-roles" class="panel">
       <div class="toolbar">
         <label class="field-inline">
           <span class="field-title">编排方案 Profile</span>
@@ -41,13 +41,13 @@
           <input type="checkbox" id="set-default-profile" />
           <span>设为 MCP 默认 Profile</span>
         </label>
-        <button id="save-stages" class="primary">保存 Stage 配置</button>
+        <button id="save-roles" class="primary">保存 Role 配置</button>
       </div>
       <p id="active-profile-hint" class="hint active-profile-hint"></p>
       <div id="profile-desc" class="profile-desc"></div>
       <p class="hint">
-        为所选 Profile 指定每个<strong>流水线阶段</strong>使用的厂商与模型；覆盖写入
-        <code>data/stages.local.json</code>，不修改仓库内 YAML 模板。带 <strong>*</strong> 表示已被本地覆盖。
+        为所选 Profile 指定每个<strong>Review 角色</strong>使用的厂商与模型；覆盖写入
+        <code>data/roles.local.json</code>，不修改仓库内 YAML 模板。带 <strong>*</strong> 表示已被本地覆盖。
         MCP 调用未传 <code>profile</code> 时使用勾选的「MCP 默认 Profile」。
         模型下拉来自<strong>仓库内置常见 model ID</strong> +「模型厂商」页<strong>+ 添加</strong>写入的自定义模型 + 默认模型（不实时拉厂商 API）。各厂商 model 字符串须与 API 文档一致，通常<strong>全小写 + 连字符</strong>（智谱直连用 <code>glm-5.2</code>，不是百炼的 <code>ZHIPU/GLM-5.2</code>）。
       </p>
@@ -55,13 +55,13 @@
         <table>
           <thead>
             <tr>
-              <th>阶段 Stage</th>
+              <th>Review 角色</th>
               <th>模型厂商 Provider</th>
               <th>模型 ID Model</th>
               <th>交接 Schema</th>
             </tr>
           </thead>
-          <tbody id="stages-body"></tbody>
+          <tbody id="roles-body"></tbody>
         </table>
       </div>
     </section>

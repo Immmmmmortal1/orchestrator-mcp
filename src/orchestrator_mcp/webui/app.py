@@ -12,9 +12,9 @@ from orchestrator_mcp.config_store import (
     PROVIDER_IDS,
     add_custom_model,
     get_active_profile_name,
-    get_profile_stages_for_ui,
+    get_profile_roles_for_ui,
     list_providers_for_ui,
-    save_stage_overrides,
+    save_role_overrides,
     set_active_profile_name,
     update_provider_from_ui,
 )
@@ -37,43 +37,38 @@ MCP_TOOLS: list[dict[str, str]] = [
     },
     {
         "name": "orchestrate_list_profiles",
-        "label_zh": "列出编排方案",
-        "desc_zh": "读取 profiles/*.yaml；返回 active_profile（WebUI 默认）与各方案 is_active。",
+        "label_zh": "列出 Review 方案",
+        "desc_zh": "读取 profiles/*.yaml；返回 active_profile（WebUI 默认）与各 Review 角色方案。",
     },
     {
         "name": "orchestrate_effective_config",
         "label_zh": "查看有效配置",
-        "desc_zh": "不调用模型，展示 UI / 代码 / 通用审查角色实际使用的 profile / provider / model / key 状态。",
+        "desc_zh": "不调用模型，展示 UI / 代码 / 通用 Review 角色实际使用的 profile / provider / model / key 状态。",
     },
     {
         "name": "orchestrate_run_start",
-        "label_zh": "创建编排任务",
-        "desc_zh": "按 Profile 创建审查 run；可指定 ui_review / code_review / general_review。",
+        "label_zh": "创建审查 Run",
+        "desc_zh": "按 Profile 创建审查 run；可指定 ui_review / code_review / general_review；不执行编码或交付。",
     },
     {
         "name": "orchestrate_dispatch",
-        "label_zh": "执行单个 Stage",
-        "desc_zh": "对 run_id 跑 ui_review / code_review / general_review 中的一步。",
-    },
-    {
-        "name": "orchestrate_run_pipeline",
-        "label_zh": "一键跑完整流水线",
-        "desc_zh": "默认依次跑三类审查；传 stage 时只跑单个审查角色。",
+        "label_zh": "执行单个 Review 角色",
+        "desc_zh": "对 run_id 运行 ui_review / code_review / general_review 中的一个独立审查角色。",
     },
     {
         "name": "orchestrate_status",
-        "label_zh": "查看任务状态",
-        "desc_zh": "查询 run 进度、各 stage handoff 与 token 汇总。",
+        "label_zh": "查看审查状态",
+        "desc_zh": "查询单角色审查 run 状态、handoff 与 token 汇总。",
     },
     {
         "name": "orchestrate_handoff",
-        "label_zh": "读取 Stage 产出",
-        "desc_zh": "获取某 stage 最新 handoff JSON（plan.v1 等）。",
+        "label_zh": "读取 Review 结果",
+        "desc_zh": "获取当前 run 绑定角色的最新结构化 handoff JSON。",
     },
     {
-        "name": "orchestrate_stage_override",
-        "label_zh": "运行时改 Stage",
-        "desc_zh": "在 dispatch 前临时换某审查角色的 provider / model。",
+        "name": "orchestrate_role_override",
+        "label_zh": "运行时改 Review 角色",
+        "desc_zh": "在 dispatch 前临时更换当前 run 角色的 provider / model。",
     },
 ]
 
@@ -104,13 +99,13 @@ class ProviderUpdate(BaseModel):
     clear_api_key: bool = False
 
 
-class StageItem(BaseModel):
+class RoleItem(BaseModel):
     provider: str
     model: str
 
 
-class StagesUpdate(BaseModel):
-    stages: dict[str, StageItem]
+class RolesUpdate(BaseModel):
+    roles: dict[str, RoleItem]
     set_as_default: bool = False
     active_profile: str | None = None  # legacy; prefer set_as_default
 
@@ -165,7 +160,7 @@ def api_info() -> dict[str, object]:
         "notes_zh": [
             "WebUI 与 MCP 是同一目录下的两个进程：配置页 :18068，MCP :18067。",
             "改 WebUI 配置后无需重启 MCP；改环境变量后需重启 ./start.sh。",
-            "复制 orchestrator-mcp 整个目录即可带走 WebUI 代码；data/*.local.json 为本机密钥与 Stage 覆盖（默认不进 git）。",
+            "复制 orchestrator-mcp 整个目录即可带走 WebUI 代码；data/*.local.json 为本机密钥与 Role 覆盖（默认不进 git）。",
             "新机器需分别执行 ./start.sh 与 ./start-webui.sh，并在 Cursor 里配置 orchestrator-mcp。",
         ],
     }
@@ -215,27 +210,27 @@ def api_list_profiles() -> dict[str, object]:
     }
 
 
-@app.get("/api/profiles/{profile_name}/stages")
-def api_get_stages(profile_name: str) -> dict[str, object]:
+@app.get("/api/profiles/{profile_name}/roles")
+def api_get_roles(profile_name: str) -> dict[str, object]:
     try:
-        return get_profile_stages_for_ui(profile_name)
+        return get_profile_roles_for_ui(profile_name)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.put("/api/profiles/{profile_name}/stages")
-def api_save_stages(profile_name: str, body: StagesUpdate) -> dict[str, object]:
+@app.put("/api/profiles/{profile_name}/roles")
+def api_save_roles(profile_name: str, body: RolesUpdate) -> dict[str, object]:
     payload = {
-        stage: item.model_dump()
-        for stage, item in body.stages.items()
+        role: item.model_dump()
+        for role, item in body.roles.items()
     }
-    save_stage_overrides(profile_name, payload)
+    save_role_overrides(profile_name, payload)
     if body.set_as_default:
         set_active_profile_name(profile_name)
     elif body.active_profile:
         # Backward compat for older WebUI clients that always sent active_profile.
         set_active_profile_name(body.active_profile)
-    return get_profile_stages_for_ui(profile_name)
+    return get_profile_roles_for_ui(profile_name)
 
 
 @app.get("/")

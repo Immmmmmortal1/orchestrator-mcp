@@ -3,22 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..profiles import StageConfig
+from ..profiles import RoleConfig
 
-_STAGE_RULES: dict[str, str] = {
-    "plan": (
-        "Produce plan.v1 JSON only. Fields: schema=plan.v1, summary, tasks[{id,desc,files_hint?}], "
-        "acceptance[], risks[], out_of_scope[]. Break work into concrete engineering tasks."
-    ),
-    "code": (
-        "Produce code_handoff.v1 JSON only. Fields: schema=code_handoff.v1, tasks_done[], "
-        "files_changed[], test_commands[], notes_for_reviewer. "
-        "Base decisions on the provided plan; describe intended code changes (paths + rationale)."
-    ),
-    "review": (
-        "Produce review.v1 JSON only. Fields: schema=review.v1, verdict=pass|revise, "
-        "blocking[], suggestions[]. Judge whether code handoff satisfies the plan acceptance criteria."
-    ),
+_ROLE_RULES: dict[str, str] = {
     "ui_review": (
         "Produce review.v1 JSON only. Fields: schema=review.v1, verdict=pass|revise, "
         "blocking[], suggestions[]. You are a UI implementation reviewer. Focus on Figma/design parity, "
@@ -38,28 +25,25 @@ _STAGE_RULES: dict[str, str] = {
         "user flow completeness, edge cases, consistency, release risk, and anything not covered by dedicated "
         "UI or code review roles."
     ),
-    "deliver": (
-        "Produce deliver.v1 JSON only. Fields: schema=deliver.v1, title, summary, test_plan[], "
-        "artifacts[], pr_body_markdown. Summarize for human handoff / PR description."
-    ),
 }
 
 
 def build_messages(
     *,
-    stage: str,
+    role: str,
     goal: str,
-    stage_config: StageConfig,
+    role_config: RoleConfig,
     inputs: dict[str, Any],
 ) -> list[dict[str, str]]:
     from ..context.workspace import format_workspace_context_for_prompt
 
-    rules = _STAGE_RULES.get(stage)
+    rules = _ROLE_RULES.get(role)
     if not rules:
-        raise ValueError(f"unsupported stage for LLM prompt: {stage}")
+        raise ValueError(f"unsupported role for LLM prompt: {role}")
 
     system_parts = [
-        "You are a stage worker in a software delivery pipeline. "
+        "You are an independent review-role worker in a review hub, not a software delivery pipeline. "
+        "Review only the caller-provided goal and evidence. Do not plan implementation, modify files, commit, push, or deliver code. "
         "Output MUST be a single valid JSON object. No markdown fences, no commentary.",
         rules,
     ]
@@ -70,14 +54,7 @@ def build_messages(
 
     system = "\n\n".join(system_parts)
 
-    user_payload: dict[str, Any] = {"goal": goal, "stage": stage}
-    if inputs.get("plan"):
-        user_payload["plan"] = inputs["plan"]
-    if inputs.get("code"):
-        user_payload["code_handoff"] = inputs["code"]
-    if inputs.get("review"):
-        user_payload["review"] = inputs["review"]
-
+    user_payload: dict[str, Any] = {"goal": goal, "role": role}
     ctx = inputs.get("workspace_context")
     if isinstance(ctx, dict):
         user_payload["workspace"] = ctx.get("workspace")
